@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAGeo Lead Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f4f0;color:#1a1a1a;min-height:100vh;}
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f0;}
+.login-card{background:#fff;border-radius:16px;border:0.5px solid #ddd;padding:2rem;width:340px;max-width:90vw;text-align:center;box-sizing:border-box;}
+.login-logo{font-size:22px;font-weight:600;margin-bottom:4px;}.login-logo span{color:#2563eb;}
+.login-sub{font-size:13px;color:#888;margin-bottom:2rem;}
+.pin-input{width:100%;padding:10px 14px;border:0.5px solid #ddd;border-radius:8px;font-size:16px;text-align:center;letter-spacing:6px;background:#f9f9f7;margin-bottom:1rem;box-sizing:border-box;}
+.pin-input:focus{outline:none;border-color:#2563eb;}
+.login-btn{width:100%;padding:11px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;}
+.login-btn:hover{background:#1d4ed8;}
+.login-error{font-size:12px;color:#dc2626;margin-top:8px;}
+#app{display:none;}
+.topbar{background:#fff;border-bottom:0.5px solid #e5e5e5;padding:0 1.5rem;display:flex;align-items:center;gap:1rem;height:52px;position:sticky;top:0;z-index:100;flex-wrap:wrap;}
+.topbar-logo{font-size:15px;font-weight:600;flex:1;}.topbar-logo span{color:#2563eb;}
+.topbar-user{font-size:12px;color:#888;}.topbar-user strong{color:#1a1a1a;}
+.logout-btn{font-size:12px;padding:4px 10px;border:0.5px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;color:#888;}
+.sync-btn{font-size:12px;padding:5px 12px;border:0.5px solid #2563eb;border-radius:6px;background:#fff;cursor:pointer;color:#2563eb;}
+.settings-btn{font-size:18px;background:none;border:none;cursor:pointer;color:#888;padding:4px;}
+.main{max-width:1100px;margin:0 auto;padding:1.5rem;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.5rem;}
+.stat{background:#fff;border-radius:10px;border:0.5px solid #e5e5e5;padding:12px 16px;}
+.stat-label{font-size:11px;color:#888;margin-bottom:4px;}.stat-value{font-size:24px;font-weight:600;color:#1a1a1a;}
+.view-toggle{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;}
+.vbtn{padding:6px 14px;font-size:13px;border-radius:8px;border:0.5px solid #ddd;background:#fff;color:#888;cursor:pointer;}
+.vbtn.active{background:#f4f4f0;color:#1a1a1a;font-weight:500;border-color:#bbb;}
+.search-row{margin-bottom:1rem;max-width:340px;}
+.search-row input{width:100%;padding:8px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;background:#f9f9f7;font-family:inherit;}
+.search-row input:focus{outline:none;border-color:#2563eb;}
+.installs{display:flex;flex-direction:column;gap:10px;}
+.card{background:#fff;border:0.5px solid #e5e5e5;border-radius:14px;overflow:hidden;}
+.card-header{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;}
+.card-header:hover{background:#fafaf8;}
+.avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;}
+.card-meta{flex:1;min-width:0;}
+.card-name{font-size:14px;font-weight:600;color:#1a1a1a;}
+.card-addr{font-size:12px;color:#888;margin-top:1px;}
+.card-email{font-size:11px;color:#2563eb;margin-top:2px;}
+.card-pills{display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap;}
+.pill{font-size:11px;padding:3px 9px;border-radius:6px;}
+.pill-status{background:#f4f4f0;color:#555;}
+.pill-reply{background:#fee2e2;color:#dc2626;font-weight:600;}
+.pill-est{background:#dcfce7;color:#16a34a;}
+.chevron{font-size:14px;color:#bbb;transition:transform 0.2s;flex-shrink:0;}.chevron.open{transform:rotate(180deg);}
+.card-body{display:none;border-top:0.5px solid #f0f0f0;}.card-body.open{display:block;}
+.info-section{padding:12px 16px;border-bottom:0.5px solid #f0f0f0;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#555;}
+.info-item{display:flex;gap:6px;}
+.info-label{color:#aaa;}
+.status-select{font-size:12px;padding:4px 8px;border:0.5px solid #ddd;border-radius:6px;background:#f9f9f7;font-family:inherit;}
+.est-section{padding:10px 16px;border-bottom:0.5px solid #f0f0f0;}
+.est-item{font-size:12px;color:#555;padding:4px 0;}
+.threads-section{padding:10px 16px;border-bottom:0.5px solid #f0f0f0;}
+.thread-item{border:0.5px solid #e5e5e5;border-radius:8px;margin-bottom:6px;overflow:hidden;}
+.thread-item.needs-reply{border-color:#fca5a5;background:#fff5f5;}
+.thread-hd{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;font-size:12px;}
+.thread-hd:hover{background:rgba(0,0,0,0.02);}
+.thread-subject{flex:1;font-weight:500;color:#1a1a1a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.thread-time{font-size:11px;color:#aaa;white-space:nowrap;}
+.msg-list{border-top:0.5px solid #f0f0f0;padding:8px 10px;display:none;}
+.msg-list.open{display:block;}
+.msg-item{padding:6px 0;border-bottom:0.5px solid #f5f5f5;font-size:11.5px;}
+.msg-item:last-child{border-bottom:none;}
+.msg-dir{font-weight:600;margin-right:4px;}
+.msg-dir.in{color:#2563eb;}.msg-dir.out{color:#16a34a;}
+.msg-snippet{color:#888;margin-top:2px;}
+.no-threads{font-size:12px;color:#bbb;padding:6px 0;}
+.delete-zone{padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.hide-btn{font-size:12px;padding:5px 12px;border:0.5px solid #ddd;border-radius:8px;background:#fff;color:#888;cursor:pointer;font-family:inherit;}
+.hide-btn:hover{background:#f4f4f0;}
+.delete-btn{font-size:12px;padding:5px 12px;border:0.5px solid #fca5a5;border-radius:8px;background:#fff;color:#dc2626;cursor:pointer;font-family:inherit;}
+.delete-btn:hover{background:#fee2e2;}
+.delete-confirm-area{display:none;align-items:center;gap:8px;flex-wrap:wrap;}
+.delete-confirm-area.show{display:flex;}
+.delete-hint{font-size:11px;color:#dc2626;}
+.delete-type-input{font-size:12px;padding:4px 8px;border:0.5px solid #fca5a5;border-radius:6px;width:90px;}
+.delete-go-btn{font-size:12px;padding:5px 12px;border:none;border-radius:8px;background:#dc2626;color:#fff;cursor:pointer;font-family:inherit;}
+.delete-cancel-btn{font-size:12px;padding:5px 12px;border:0.5px solid #ddd;border-radius:8px;background:#fff;color:#888;cursor:pointer;font-family:inherit;}
+.reactivate-btn{font-size:12px;padding:5px 14px;border:0.5px solid #2563eb;border-radius:8px;background:#fff;color:#2563eb;cursor:pointer;font-family:inherit;}
+.reactivate-btn:hover{background:#eff6ff;}
+.gmail-card{background:#fff;border:0.5px solid #e5e5e5;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:8px;}
+.gmail-status{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.gmail-status.ok{background:#16a34a;}.gmail-status.err{background:#dc2626;}.gmail-status.discon{background:#bbb;}
+.gmail-email{flex:1;font-size:13px;font-weight:500;}
+.gmail-meta{font-size:11px;color:#888;}
+.disconnect-btn{font-size:11px;padding:4px 10px;border:0.5px solid #fca5a5;border-radius:6px;background:#fff;color:#dc2626;cursor:pointer;font-family:inherit;}
+.connect-btn{font-size:13px;padding:8px 16px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;font-family:inherit;font-weight:500;}
+.connect-btn:hover{background:#1d4ed8;}
+.log-list{background:#fff;border-radius:12px;border:0.5px solid #e5e5e5;overflow:hidden;}
+.log-item{padding:10px 16px;border-bottom:0.5px solid #f0f0f0;display:flex;gap:10px;align-items:flex-start;}
+.log-item:last-child{border-bottom:none;}
+.log-who{font-size:12px;font-weight:500;color:#1a1a1a;white-space:nowrap;}
+.log-what{flex:1;font-size:12px;color:#555;}
+.log-when{font-size:11px;color:#aaa;white-space:nowrap;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal{background:#fff;border-radius:14px;padding:1.5rem;width:400px;max-width:95vw;}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:1.25rem;}
+.modal-row{margin-bottom:1rem;}
+.modal-label{font-size:12px;color:#888;margin-bottom:4px;}
+.modal-input{width:100%;padding:8px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;background:#f9f9f7;color:#1a1a1a;}
+.modal-input:focus{outline:none;border-color:#2563eb;}
+.modal-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem;}
+.modal-cancel{padding:8px 16px;border:0.5px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-family:inherit;color:#888;}
+.modal-save{padding:8px 16px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px;font-family:inherit;font-weight:500;}
+.empty{padding:2rem;text-align:center;color:#aaa;font-size:13px;}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:#1a1a1a;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:300;opacity:0;transition:opacity 0.3s;pointer-events:none;}
+.toast.show{opacity:1;}
+@media(max-width:600px){
+  .stats{grid-template-columns:1fr 1fr;gap:8px;}
+  .stat-value{font-size:20px;}
+  .topbar{height:auto;padding:8px 12px;gap:6px;}
+  .main{padding:1rem 0.75rem;}
+}
+</style>
+</head>
+<body>
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">NAGeo <span>Leads</span></div>
+    <div class="login-sub">North American GeoThermal &mdash; Lead &amp; Email Tracking</div>
+    <input type="password" class="pin-input" id="pin-input" placeholder="Enter your PIN" maxlength="6" inputmode="numeric">
+    <button class="login-btn" onclick="doLogin()">Sign in</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo">NAGeo <span>Leads</span></div>
+    <button class="sync-btn" onclick="syncHCP()">&#8635; Sync HCP</button>
+    <button class="settings-btn" onclick="openSettings()" title="Settings">&#9881;</button>
+    <div class="topbar-user">Signed in as <strong id="topbar-name"></strong></div>
+    <button class="logout-btn" onclick="doLogout()">Sign out</button>
+  </div>
+  <div class="main">
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Total leads</div><div class="stat-value" id="s-total">0</div></div>
+      <div class="stat"><div class="stat-label">Awaiting reply</div><div class="stat-value" id="s-reply" style="color:#dc2626">0</div></div>
+      <div class="stat"><div class="stat-label">Gmail accounts</div><div class="stat-value" id="s-gmail" style="color:#2563eb">0</div></div>
+      <div class="stat"><div class="stat-label">Hidden</div><div class="stat-value" id="s-hidden" style="color:#888">0</div></div>
+    </div>
+    <div class="view-toggle">
+      <button class="vbtn active" id="btn-leads" onclick="setView('leads')">&#9776; Leads</button>
+      <button class="vbtn" id="btn-gmail" onclick="setView('gmail')">&#9993; Gmail Accounts</button>
+      <button class="vbtn" id="btn-log" onclick="setView('log')">&#128203; Activity log</button>
+      <button class="vbtn" id="btn-hidden" onclick="setView('hidden')">&#128683; Hidden</button>
+    </div>
+    <div id="view-leads">
+      <div class="search-row"><input type="text" id="search-input" placeholder="Search name, email, address..." oninput="renderLeads()"></div>
+      <div class="installs" id="leads-list"></div>
+    </div>
+    <div id="view-gmail" style="display:none">
+      <div style="margin-bottom:14px;"><button class="connect-btn" onclick="connectGmail()">+ Connect Gmail</button></div>
+      <div id="gmail-list"></div>
+    </div>
+    <div id="view-log" style="display:none">
+      <div class="log-list" id="log-list"></div>
+    </div>
+    <div id="view-hidden" style="display:none">
+      <div class="installs" id="hidden-list"></div>
+    </div>
+  </div>
+</div>
+<div class="modal-bg" id="settings-modal">
+  <div class="modal">
+    <div class="modal-title">Settings</div>
+    <div class="modal-row">
+      <div class="modal-label">HCP Customer Tag (for leads)</div>
+      <input type="text" class="modal-input" id="hcp-tag-input" placeholder="e.g. Prospect">
+    </div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="modal-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+// ── CONFIG — same Supabase project as your other NAGeo tools ──
+var SUPABASE_URL = 'https://hpgwwegjsxyxovdattoc.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_D2PqYQoJjZ8koEM9NPvmeg_KB_Wa66H';
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+var LEAD_HCP_SYNC_URL   = SUPABASE_URL + '/functions/v1/lead-hcp-sync';
+var LEAD_GMAIL_OAUTH_URL = SUPABASE_URL + '/functions/v1/lead-gmail-oauth';
+// Fill this in once you've created the OAuth client in Google Cloud Console
+// (step 3 of the setup doc). It's a public identifier, not a secret — safe
+// to have here in plain JS, same as SUPABASE_KEY above.
+var GOOGLE_CLIENT_ID = 'REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+
+var currentUser = null, users = [];
+var leads = [], gmailAccounts = [], activityLog = [];
+var openCards = new Set(), openThreads = new Set(), showDel = new Set(), threadsByLead = {}, messagesByThread = {};
+var currentView = 'leads';
+var appSettings = {};
+
+async function init() {
+  var saved = localStorage.getItem('nageo_leads_user');
+  if (saved) { currentUser = JSON.parse(saved); showApp(); }
+  else { await loadUsers(); showLogin(); }
+}
+async function loadUsers() {
+  var res = await sb.from('users').select('*').order('name');
+  users = res.data || [];
+}
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+async function doLogin() {
+  var pin = document.getElementById('pin-input').value.trim();
+  if (!pin) { document.getElementById('login-error').textContent = 'Please enter your PIN.'; return; }
+  var user = users.find(function(u){return u.pin === pin;});
+  if (!user) { document.getElementById('login-error').textContent = 'PIN not recognized. Try again.'; document.getElementById('pin-input').value = ''; return; }
+  currentUser = user;
+  localStorage.setItem('nageo_leads_user', JSON.stringify(user));
+  showApp();
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key==='Enter' && document.getElementById('login-screen').style.display!=='none') doLogin();
+});
+document.getElementById('pin-input').addEventListener('input', function() {
+  if (this.value.length >= 4) { var u = users.find(function(x){return x.pin===this.value;}, this); if (u) doLogin(); }
+});
+function doLogout() {
+  currentUser = null; localStorage.removeItem('nageo_leads_user');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('pin-input').value = '';
+}
+async function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('topbar-name').textContent = currentUser.name;
+  checkGmailRedirect();
+  await loadSettings();
+  await loadAll();
+  startRealtime();
+}
+// If we just landed back here from lead-gmail-oauth's redirect, show the result.
+function checkGmailRedirect() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.has('gmail_status')) {
+    var ok = params.get('gmail_status') === 'ok';
+    showToast((ok ? '✓ ' : '⚠ ') + (params.get('msg') || 'Gmail connection updated.'));
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+async function loadSettings() {
+  var r = await sb.from('settings').select('*');
+  if (r.data) r.data.forEach(function(row){ appSettings[row.key] = row.value; });
+}
+function openSettings() {
+  document.getElementById('hcp-tag-input').value = appSettings.leadHcpTag || 'Prospect';
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings(){ document.getElementById('settings-modal').classList.remove('open'); }
+async function saveSettings() {
+  var tag = document.getElementById('hcp-tag-input').value.trim() || 'Prospect';
+  appSettings.leadHcpTag = tag;
+  await sb.from('settings').upsert({ key: 'leadHcpTag', value: tag });
+  closeSettings(); showToast('Settings saved.');
+}
+// ── Data loading ──────────────────────────────────────────────────────────
+async function loadAll() {
+  var r1 = await sb.from('leads').select('*').eq('archived', false).order('created_at', { ascending: false });
+  var r2 = await sb.from('leads').select('*').eq('archived', true).order('created_at', { ascending: false });
+  var r3 = await sb.from('lead_activity_log').select('*').order('created_at', { ascending: false }).limit(300);
+  leads = r1.data || [];
+  var hidden = r2.data || [];
+  activityLog = r3.data || [];
+  window._hiddenLeads = hidden;
+  await loadThreadsForLeads(leads.concat(hidden));
+  await loadGmailAccounts();
+  render();
+}
+async function loadThreadsForLeads(allLeads) {
+  threadsByLead = {}; messagesByThread = {};
+  var ids = allLeads.map(function(l){return l.id;});
+  if (!ids.length) return;
+  var tRes = await sb.from('email_threads').select('*').in('lead_id', ids).order('last_message_at', { ascending: false });
+  var threads = tRes.data || [];
+  threads.forEach(function(t){ if (!threadsByLead[t.lead_id]) threadsByLead[t.lead_id] = []; threadsByLead[t.lead_id].push(t); });
+  var threadIds = threads.map(function(t){return t.id;});
+  if (threadIds.length) {
+    var mRes = await sb.from('email_messages').select('*').in('thread_id', threadIds).order('sent_at', { ascending: true });
+    (mRes.data || []).forEach(function(m){ if (!messagesByThread[m.thread_id]) messagesByThread[m.thread_id] = []; messagesByThread[m.thread_id].push(m); });
+  }
+}
+async function loadGmailAccounts() {
+  try {
+    var res = await fetch(LEAD_GMAIL_OAUTH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
+      body: JSON.stringify({ action: 'list_accounts' })
+    });
+    var data = await res.json();
+    gmailAccounts = data.accounts || [];
+  } catch (e) { gmailAccounts = []; }
+}
+// ── HCP sync ──────────────────────────────────────────────────────────────
+async function syncHCP() {
+  showToast('Syncing prospects from Housecall Pro...');
+  try {
+    var res = await fetch(LEAD_HCP_SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
+      body: JSON.stringify({ action: 'sync_leads', tag: appSettings.leadHcpTag || 'Prospect' })
+    });
+    if (!res.ok) { showToast('HCP sync failed.'); return; }
+    var data = await res.json();
+    showToast('Synced ' + (data.count||0) + ' lead(s) tagged "' + (data.tag||'Prospect') + '".');
+    await loadAll();
+  } catch (e) { showToast('HCP sync error.'); console.error(e); }
+}
+// ── Gmail connect / disconnect ──────────────────────────────────────────────
+function connectGmail() {
+  var params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: LEAD_GMAIL_OAUTH_URL,
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.metadata',
+    state: currentUser.id
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+}
+async function disconnectGmail(accountId) {
+  if (!confirm('Disconnect this Gmail account? Existing email history is kept.')) return;
+  await fetch(LEAD_GMAIL_OAUTH_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
+    body: JSON.stringify({ action: 'disconnect', account_id: accountId })
+  });
+  await loadGmailAccounts();
+  renderGmail(); updateStats();
+  showToast('Gmail account disconnected.');
+}
+// ── Views ─────────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  ['leads','gmail','log','hidden'].forEach(function(n){
+    document.getElementById('view-'+n).style.display = v===n ? 'block' : 'none';
+    document.getElementById('btn-'+n).className = 'vbtn' + (v===n ? ' active' : '');
+  });
+}
+function updateStats() {
+  document.getElementById('s-total').textContent = leads.length;
+  var awaiting = 0;
+  leads.forEach(function(l){ (threadsByLead[l.id]||[]).forEach(function(t){ if (t.needs_reply) awaiting++; }); });
+  document.getElementById('s-reply').textContent = awaiting;
+  document.getElementById('s-gmail').textContent = gmailAccounts.filter(function(a){return a.status==='connected';}).length;
+  document.getElementById('s-hidden').textContent = (window._hiddenLeads||[]).length;
+}
+function render() { updateStats(); renderLeads(); renderGmail(); renderLog(); renderHidden(); }
+function initials(n){ return (n||'').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || '?'; }
+function leadNeedsReplyCount(leadId) { return (threadsByLead[leadId]||[]).filter(function(t){return t.needs_reply;}).length; }
+function timeAgo(ts){
+  if (!ts) return '';
+  var d = Math.floor((Date.now()-new Date(ts))/1000);
+  if (d<60) return 'just now';
+  if (d<3600) return Math.floor(d/60)+'m ago';
+  if (d<86400) return Math.floor(d/3600)+'h ago';
+  return Math.floor(d/86400)+'d ago';
+}
+// ── Leads list ────────────────────────────────────────────────────────────
+function renderLeads() {
+  var q = (document.getElementById('search-input').value || '').toLowerCase();
+  var list = leads.filter(function(l){
+    if (!q) return true;
+    var hay = ((l.customer_name||'')+' '+(l.primary_email||'')+' '+(l.address||'')+' '+(l.contact_emails||[]).join(' ')).toLowerCase();
+    return hay.includes(q);
+  });
+  var el = document.getElementById('leads-list');
+  if (!list.length) { el.innerHTML = '<div class="empty">No leads yet. Click "Sync HCP" to pull customers tagged "' + (appSettings.leadHcpTag||'Prospect') + '".</div>'; return; }
+  el.innerHTML = list.map(function(l){ return renderLeadCard(l, false); }).join('');
+}
+function renderHidden() {
+  var list = window._hiddenLeads || [];
+  var el = document.getElementById('hidden-list');
+  if (!list.length) { el.innerHTML = '<div class="empty">No hidden leads.</div>'; return; }
+  el.innerHTML = list.map(function(l){ return renderLeadCard(l, true); }).join('');
+}
+function renderLeadCard(l, isHidden) {
+  var isOpen = openCards.has(l.id);
+  var delOpen = showDel.has(l.id);
+  var replyCount = leadNeedsReplyCount(l.id);
+  var threads = threadsByLead[l.id] || [];
+  var estimates = l.estimates || [];
+  var html = '<div class="card" id="card-'+l.id+'">';
+  html += '<div class="card-header" onclick="toggleCard(\''+l.id+'\')">';
+  html += '<div class="avatar">'+initials(l.customer_name)+'</div>';
+  html += '<div class="card-meta"><div class="card-name">'+esc(l.customer_name||'Unknown')+'</div>';
+  if (l.address) html += '<div class="card-addr">'+esc(l.address)+'</div>';
+  if (l.primary_email) html += '<div class="card-email">'+esc(l.primary_email)+'</div>';
+  html += '</div>';
+  html += '<div class="card-pills">';
+  html += '<span class="pill pill-status">'+esc(l.status||'new')+'</span>';
+  if (estimates.length) html += '<span class="pill pill-est">'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+'</span>';
+  if (replyCount > 0) html += '<span class="pill pill-reply">&#9888; '+replyCount+' awaiting reply</span>';
+  html += '</div><span class="chevron '+(isOpen?'open':'')+'">&#9662;</span></div>';
+  html += '<div class="card-body '+(isOpen?'open':'')+'">';
+  html += '<div class="info-section">';
+  html += '<div class="info-item"><span class="info-label">Phone</span> '+esc(l.phone||'—')+'</div>';
+  html += '<div class="info-item"><span class="info-label">Customer ID</span> '+esc(l.customer_tag_id||'—')+'</div>';
+  html += '<div class="info-item"><span class="info-label">Status</span> <select class="status-select" onchange="setStatus(\''+l.id+'\',this.value)">';
+  ['new','contacted','quoted','won','lost'].forEach(function(s){ html += '<option value="'+s+'" '+(l.status===s?'selected':'')+'>'+s+'</option>'; });
+  html += '</select></div></div>';
+  if (estimates.length) {
+    html += '<div class="est-section">';
+    estimates.forEach(function(e){ html += '<div class="est-item">Estimate #'+esc(e.id)+' — '+esc(e.status||'')+(e.total?' — $'+Number(e.total).toLocaleString():'')+'</div>'; });
+    html += '</div>';
+  }
+  html += '<div class="threads-section">';
+  if (!threads.length) {
+    html += '<div class="no-threads">No email threads linked yet.</div>';
+  } else {
+    threads.forEach(function(t){
+      var tOpen = openThreads.has(t.id);
+      var msgs = messagesByThread[t.id] || [];
+      html += '<div class="thread-item'+(t.needs_reply?' needs-reply':'')+'">';
+      html += '<div class="thread-hd" onclick="toggleThread(\''+t.id+'\')">';
+      if (t.needs_reply) html += '<span style="color:#dc2626;font-weight:700;">&#9679;</span>';
+      html += '<span class="thread-subject">'+esc(t.subject||'(no subject)')+'</span>';
+      html += '<span class="thread-time">'+timeAgo(t.last_message_at)+'</span>';
+      html += '</div>';
+      html += '<div class="msg-list'+(tOpen?' open':'')+'">';
+      if (!msgs.length) html += '<div class="no-threads">No messages loaded.</div>';
+      msgs.forEach(function(m){
+        html += '<div class="msg-item"><span class="msg-dir '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'← Received':'→ Sent')+'</span>'+esc(m.from_address||'')+'<div class="msg-snippet">'+esc(m.snippet||'')+'</div></div>';
+      });
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+  html += '<div class="delete-zone">';
+  if (!delOpen) {
+    if (isHidden) {
+      html += '<button class="reactivate-btn" onclick="event.stopPropagation();hideLead(\''+l.id+'\',false)">&#8634; Unhide</button>';
+    } else {
+      html += '<button class="hide-btn" onclick="event.stopPropagation();hideLead(\''+l.id+'\',true)">&#128683; Hide</button>';
+    }
+    html += '<button class="delete-btn" onclick="event.stopPropagation();showDeleteConfirm(\''+l.id+'\')">&#128465; Delete</button>';
+  } else {
+    html += '<span class="delete-hint">Type DELETE to confirm:</span>';
+    html += '<div class="delete-confirm-area show">';
+    html += '<input type="text" class="delete-type-input" id="del-input-'+l.id+'" placeholder="DELETE">';
+    html += '<button class="delete-go-btn" onclick="confirmDelete(\''+l.id+'\')">Delete</button>';
+    html += '<button class="delete-cancel-btn" onclick="cancelDelete(\''+l.id+'\')">Cancel</button>';
+    html += '</div>';
+  }
+  html += '</div></div></div>';
+  return html;
+}
+function toggleCard(id){ if(openCards.has(id))openCards.delete(id);else openCards.add(id); renderLeads(); renderHidden(); }
+function toggleThread(id){ if(openThreads.has(id))openThreads.delete(id);else openThreads.add(id); renderLeads(); renderHidden(); }
+async function setStatus(leadId, status) {
+  await sb.from('leads').update({ status: status, updated_at: new Date().toISOString() }).eq('id', leadId);
+  var l = leads.find(function(x){return x.id===leadId;}); if (l) l.status = status;
+  await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: 'Status changed to ' + status });
+  showToast('Status updated.');
+}
+async function hideLead(leadId, hide) {
+  await sb.from('leads').update({ archived: hide, updated_at: new Date().toISOString() }).eq('id', leadId);
+  await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: hide ? 'Hidden' : 'Unhidden' });
+  showToast(hide ? 'Lead hidden.' : 'Lead restored.');
+  await loadAll();
+}
+function showDeleteConfirm(id){ showDel.add(id); renderLeads(); renderHidden(); }
+function cancelDelete(id){ showDel.delete(id); renderLeads(); renderHidden(); }
+async function confirmDelete(id) {
+  var val = document.getElementById('del-input-'+id);
+  if (!val || val.value.trim() !== 'DELETE') { showToast('Type DELETE in all caps to confirm.'); return; }
+  await sb.from('lead_activity_log').delete().eq('lead_id', id);
+  await sb.from('leads').delete().eq('id', id);
+  showDel.delete(id);
+  showToast('Lead deleted. Email history is kept, just unlinked.');
+  await loadAll();
+}
+// ── Gmail accounts view ──────────────────────────────────────────────────
+function renderGmail() {
+  var el = document.getElementById('gmail-list');
+  if (!gmailAccounts.length) { el.innerHTML = '<div class="empty">No Gmail accounts connected yet.</div>'; return; }
+  el.innerHTML = gmailAccounts.map(function(a){
+    var statusClass = a.status === 'connected' ? 'ok' : a.status === 'error' ? 'err' : 'discon';
+    var html = '<div class="gmail-card">';
+    html += '<span class="gmail-status '+statusClass+'"></span>';
+    html += '<div class="gmail-email">'+esc(a.google_email)+'<div class="gmail-meta">'+esc(a.status)+(a.last_error?' — '+esc(a.last_error):'')+'</div></div>';
+    html += '<button class="disconnect-btn" onclick="disconnectGmail(\''+a.id+'\')">Disconnect</button>';
+    html += '</div>';
+    return html;
+  }).join('');
+}
+// ── Activity log ──────────────────────────────────────────────────────────
+function renderLog() {
+  var el = document.getElementById('log-list');
+  if (!activityLog.length) { el.innerHTML = '<div class="empty">No activity yet.</div>'; return; }
+  var leadMap = {}; leads.concat(window._hiddenLeads||[]).forEach(function(l){ leadMap[l.id] = l.customer_name; });
+  el.innerHTML = activityLog.map(function(a){
+    return '<div class="log-item"><span class="log-who">'+esc(a.user_name||'')+'</span>'+
+      '<span class="log-what">'+(leadMap[a.lead_id]?'<strong>'+esc(leadMap[a.lead_id])+'</strong> — ':'')+esc(a.action||'')+'</span>'+
+      '<span class="log-when">'+timeAgo(a.created_at)+'</span></div>';
+  }).join('');
+}
+// ── Realtime + polling fallback ────────────────────────────────────────────
+function startRealtime() {
+  setInterval(function(){ silentRefresh(); }, 30000);
+  sb.channel('lead-tracker-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, silentRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'email_threads' }, silentRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'email_messages' }, silentRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_activity_log' }, silentRefresh)
+    .subscribe();
+}
+var refreshing = false;
+async function silentRefresh() {
+  if (refreshing) return;
+  refreshing = true;
+  var active = document.activeElement;
+  var isTyping = active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA');
+  try { if (!isTyping) await loadAll(); } catch(e) {}
+  refreshing = false;
+}
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showToast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},3500); }
+init();
+</script>
+</body>
+</html>
