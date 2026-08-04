@@ -69,33 +69,50 @@ svg{display:block;}
 .search-row input{width:100%;padding:15px 16px 15px 48px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:16px;background:var(--surface);transition:box-shadow .15s,border-color .15s;}
 .search-row input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint);}
 
-/* ── Lead cards ── */
-.leads{display:flex;flex-direction:column;gap:16px;}
-.lcard{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:22px 24px;transition:box-shadow .15s;}
-.lcard.flag{box-shadow:var(--shadow-sm),inset 4px 0 0 var(--danger);}
-.lcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;}
-.lname{font-size:22px;font-weight:700;display:flex;align-items:center;gap:8px;letter-spacing:-0.01em;}
-.lname .chev{color:var(--muted);display:inline-flex;transition:transform .18s;}
-.lname .chev svg{width:18px;height:18px;}
-.lname .chev.rot{transform:rotate(180deg);}
+/* ── Lead tiles (grid) ── */
+.leads{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start;}
+.tile{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:20px 22px;cursor:pointer;transition:box-shadow .15s,transform .1s;}
+.tile:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
+.tile.flag{box-shadow:var(--shadow-sm),inset 4px 0 0 var(--danger);}
+.tile:hover.flag{box-shadow:var(--shadow-md),inset 4px 0 0 var(--danger);}
+.tile-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;}
+.tile-name{font-size:19px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;}
+.tile-info{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;min-height:20px;}
+.tile-row{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);}
+.tile-row svg{width:15px;height:15px;flex-shrink:0;}
+.tile-row.flag{color:var(--danger-text);font-weight:600;}
+.tile-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tile-actions{display:flex;gap:8px;}
 .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
-.badge{font-size:13px;font-weight:600;padding:6px 13px;border-radius:999px;white-space:nowrap;}
+.badge{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;white-space:nowrap;}
 .badge-status{background:var(--surface-alt);color:var(--muted);}
 .badge-flag{background:var(--danger-tint);color:var(--danger-text);}
 .badge-est{background:var(--success-tint);color:var(--success-text);}
 .badge-cold{background:var(--surface-alt);color:var(--muted);}
-.lsub{font-size:15px;margin:10px 0 16px;color:var(--muted);}
-.lsub.flag{color:var(--danger-text);font-weight:600;}
-.lactions{display:flex;gap:10px;}
-.call-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:9px;height:54px;background:var(--accent);color:#fff;border-radius:var(--radius-md);font-size:17px;font-weight:600;text-decoration:none;border:none;cursor:pointer;box-shadow:var(--shadow-sm);transition:background .15s;}
-.call-btn svg{width:19px;height:19px;}
+.call-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;height:48px;background:var(--accent);color:#fff;border-radius:var(--radius-md);font-size:15px;font-weight:600;text-decoration:none;border:none;cursor:pointer;box-shadow:var(--shadow-sm);transition:background .15s;}
+.call-btn svg{width:17px;height:17px;}
 .call-btn:hover{background:var(--accent-dark);}
-.icon-btn{width:54px;height:54px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);cursor:pointer;text-decoration:none;color:var(--ink);transition:background .15s;}
-.icon-btn svg{width:20px;height:20px;}
+.icon-btn{width:48px;height:48px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);cursor:pointer;text-decoration:none;color:var(--ink);transition:background .15s;flex-shrink:0;}
+.icon-btn svg{width:18px;height:18px;}
 .icon-btn:hover{background:var(--accent-tint);color:var(--accent-text);}
 
-.ldetail{border-top:1px solid var(--border);margin-top:18px;padding-top:18px;display:none;}
-.ldetail.open{display:block;}
+/* ── Lead detail overlay ── */
+#lead-detail{display:none;position:fixed;inset:0;background:var(--bg);z-index:400;flex-direction:column;}
+#lead-detail.open{display:flex;}
+.ld-top{display:flex;align-items:center;gap:14px;padding:18px 26px;background:var(--surface);box-shadow:0 1px 0 var(--border);}
+.ld-back{display:flex;align-items:center;gap:8px;border:none;background:var(--surface-alt);color:var(--ink);padding:11px 18px;border-radius:999px;font-size:15px;font-weight:600;cursor:pointer;}
+.ld-back svg{width:17px;height:17px;transform:rotate(90deg);}
+.ld-top-name{font-size:19px;font-weight:700;}
+.ld-body{flex:1;overflow:auto;padding:2rem 1.25rem 5rem;}
+.ld-content{max-width:720px;margin:0 auto;}
+.ld-name-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px;}
+.ld-name{font-size:30px;font-weight:800;letter-spacing:-0.02em;}
+.ld-actions{display:flex;gap:10px;margin:18px 0 8px;}
+.ld-actions .call-btn{height:56px;font-size:17px;}
+.ld-actions .call-btn svg{width:19px;height:19px;}
+.ld-actions .icon-btn{width:56px;height:56px;}
+.ld-actions .icon-btn svg{width:20px;height:20px;}
+.ld-card{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:20px 22px;margin-top:20px;}
 .info-line{font-size:15px;color:var(--muted);margin-bottom:6px;}
 .info-line b{color:var(--ink);font-weight:600;}
 .status-chips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 18px;}
@@ -292,6 +309,15 @@ svg{display:block;}
   </div>
 </div>
 
+<!-- Lead detail overlay -->
+<div id="lead-detail">
+  <div class="ld-top">
+    <button class="ld-back" onclick="closeLeadDetail()" id="ld-back-btn"></button>
+    <div class="ld-top-name" id="ld-top-name"></div>
+  </div>
+  <div class="ld-body"><div class="ld-content" id="ld-content"></div></div>
+</div>
+
 <!-- Presentation mode -->
 <div id="presentation">
   <div class="pres-top">
@@ -332,7 +358,9 @@ var ICONS = {
   chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="18" height="18"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>',
-  sparkle: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>'
+  sparkle: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>'
 };
 function initIcons() {
   document.getElementById('btn-review').innerHTML = ICONS.play + ' Review leads';
@@ -344,6 +372,7 @@ function initIcons() {
   document.getElementById('icon-quotes').innerHTML = ICONS.file;
   document.getElementById('pres-play-btn').innerHTML = ICONS.play;
   document.getElementById('btn-pres-exit').innerHTML = ICONS.x;
+  document.getElementById('ld-back-btn').innerHTML = ICONS.back + ' Back to leads';
   var sr = document.getElementById('search-row-icon');
   if (sr) sr.insertAdjacentHTML('afterbegin', ICONS.search);
 }
@@ -351,7 +380,7 @@ initIcons();
 
 var currentUser = null, users = [];
 var leads = [], gmailAccounts = [];
-var openCards = new Set(), openThreads = new Set(), openEmails = new Set(), showDel = new Set();
+var openThreads = new Set(), openEmails = new Set(), showDel = new Set();
 var threadsByLead = {}, messagesByThread = {};
 var currentPage = 'active';
 var appSettings = {};
@@ -573,17 +602,63 @@ function renderPage() {
       : 'No leads yet. Click "Sync HCP" to pull customers tagged "'+esc(appSettings.leadHcpTag||'Prospect')+'".') + '</div>';
     return;
   }
-  el.innerHTML = list.map(renderLeadCard).join('');
+  el.innerHTML = list.map(renderLeadTile).join('');
 }
-function renderLeadCard(l) {
-  var isOpen = openCards.has(l.id);
+function renderLeadTile(l) {
   var replyCount = leadReplyCount(l.id);
   var threads = threadsByLead[l.id] || [];
   var estimates = l.estimates || [];
   var isCold = l.status === 'cold';
-  var html = '<div class="lcard'+(replyCount>0?' flag':'')+'" id="card-'+l.id+'">';
-  html += '<div class="lcard-top" onclick="toggleCard(\''+l.id+'\')"><div class="lname">'+esc(l.customer_name||'Unknown')+'<span class="chev'+(isOpen?' rot':'')+'">'+ICONS.chevron+'</span></div>';
-  html += '<div class="badges">';
+  var html = '<div class="tile'+(replyCount>0?' flag':'')+'" onclick="openLeadDetail(\''+l.id+'\')">';
+  html += '<div class="tile-top"><div class="tile-name">'+esc(l.customer_name||'Unknown')+'</div><div class="badges">';
+  if (isCold) html += '<span class="badge badge-cold">Cold</span>';
+  else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
+  if (replyCount>0) html += '<span class="badge badge-flag">Reply needed</span>';
+  html += '</div></div>';
+
+  html += '<div class="tile-info">';
+  if (l.address) html += '<div class="tile-row">'+ICONS.pin+'<span>'+esc(l.address)+'</span></div>';
+  if (estimates.length) html += '<div class="tile-row">'+ICONS.file+'<span>'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+' on file</span></div>';
+  var latestFlagged = null;
+  threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
+  if (latestFlagged) html += '<div class="tile-row flag">'+ICONS.mail+'<span>Last email '+timeAgo(latestFlagged.last_message_at)+' &mdash; no reply yet</span></div>';
+  else if (threads.length) html += '<div class="tile-row">'+ICONS.mail+'<span>Last contact '+timeAgo(threads[0].last_message_at)+'</span></div>';
+  else html += '<div class="tile-row">'+ICONS.mail+'<span>No email history yet</span></div>';
+  html += '</div>';
+
+  html += '<div class="tile-actions">';
+  if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'" onclick="event.stopPropagation()">'+ICONS.phone+' '+esc(l.phone)+'</a>';
+  else html += '<div class="call-btn" style="background:var(--surface-alt);color:var(--muted);cursor:default;box-shadow:none">No phone on file</div>';
+  if (l.primary_email) html += '<button class="icon-btn" onclick="event.stopPropagation();openEmailChoice(\''+esc(l.primary_email).replace(/'/g,"\\'")+'\')" title="Email">'+ICONS.mailLg+'</button>';
+  html += '</div></div>';
+  return html;
+}
+
+// ── Lead detail overlay: name, address, phone, full email history, etc. ────
+var currentDetailLeadId = null;
+function openLeadDetail(id) {
+  currentDetailLeadId = id;
+  var l = leads.find(function(x){return x.id===id;});
+  if (!l) return;
+  document.getElementById('ld-top-name').textContent = l.customer_name || 'Unknown';
+  document.getElementById('lead-detail').classList.add('open');
+  window.scrollTo(0,0);
+  renderLeadDetail();
+}
+function closeLeadDetail() {
+  currentDetailLeadId = null;
+  document.getElementById('lead-detail').classList.remove('open');
+}
+function renderLeadDetail() {
+  var l = leads.find(function(x){return x.id===currentDetailLeadId;});
+  var el = document.getElementById('ld-content');
+  if (!l) { el.innerHTML = ''; return; }
+  var threads = threadsByLead[l.id] || [];
+  var estimates = l.estimates || [];
+  var isCold = l.status === 'cold';
+  var replyCount = leadReplyCount(l.id);
+
+  var html = '<div class="ld-name-row"><div class="ld-name">'+esc(l.customer_name||'Unknown')+'</div><div class="badges">';
   if (isCold) html += '<span class="badge badge-cold">Cold lead</span>';
   else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
   if (estimates.length) html += '<span class="badge badge-est">'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+'</span>';
@@ -592,39 +667,42 @@ function renderLeadCard(l) {
 
   var latestFlagged = null;
   threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
-  if (latestFlagged) html += '<div class="lsub flag">Last email '+timeAgo(latestFlagged.last_message_at)+' &mdash; nobody has replied yet.</div>';
-  else if (threads.length) html += '<div class="lsub muted">Last contact '+timeAgo(threads[0].last_message_at)+'.</div>';
-  else html += '<div class="lsub muted">No email history yet.</div>';
+  if (latestFlagged) html += '<div class="tile-row flag" style="font-size:16px;margin-bottom:4px">Last email '+timeAgo(latestFlagged.last_message_at)+' &mdash; nobody has replied yet.</div>';
+  else if (threads.length) html += '<div class="tile-row" style="font-size:16px;margin-bottom:4px">Last contact '+timeAgo(threads[0].last_message_at)+'.</div>';
 
-  html += '<div class="lactions">';
+  html += '<div class="ld-actions">';
   if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'">'+ICONS.phone+' '+esc(l.phone)+'</a>';
   else html += '<div class="call-btn" style="background:var(--surface-alt);color:var(--muted);cursor:default;box-shadow:none">No phone on file</div>';
-  if (l.primary_email) html += '<button class="icon-btn" onclick="event.stopPropagation();openEmailChoice(\''+esc(l.primary_email).replace(/'/g,"\\'")+'\')" title="Email">'+ICONS.mailLg+'</button>';
+  if (l.primary_email) html += '<button class="icon-btn" onclick="openEmailChoice(\''+esc(l.primary_email).replace(/'/g,"\\'")+'\')" title="Email">'+ICONS.mailLg+'</button>';
   html += '</div>';
 
-  html += '<div class="ldetail'+(isOpen?' open':'')+'">';
-  if (l.address) html += '<div class="info-line"><b>Address:</b> '+esc(l.address)+'</div>';
-  if (l.customer_tag_id) html += '<div class="info-line"><b>Customer ID:</b> '+esc(l.customer_tag_id)+'</div>';
-
-  if (!isCold) {
-    html += '<div class="status-chips">';
-    ['new','contacted','quoted','won','lost'].forEach(function(s){
-      html += '<button class="schip'+(l.status===s?' active':'')+'" onclick="event.stopPropagation();setStatus(\''+l.id+'\',\''+s+'\')">'+prettyStatus(s)+'</button>';
-    });
+  if (l.address || l.customer_tag_id) {
+    html += '<div class="ld-card">';
+    if (l.address) html += '<div class="info-line"><b>Address:</b> '+esc(l.address)+'</div>';
+    if (l.customer_tag_id) html += '<div class="info-line"><b>Customer ID:</b> '+esc(l.customer_tag_id)+'</div>';
     html += '</div>';
   }
 
+  if (!isCold) {
+    html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Status</div><div class="status-chips">';
+    ['new','contacted','quoted','won','lost'].forEach(function(s){
+      html += '<button class="schip'+(l.status===s?' active':'')+'" onclick="setStatus(\''+l.id+'\',\''+s+'\')">'+prettyStatus(s)+'</button>';
+    });
+    html += '</div></div>';
+  }
+
   if (estimates.length) {
-    html += '<div class="section-label">Estimates</div>';
+    html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Estimates</div>';
     estimates.forEach(function(e){
       var num = e.estimate_number || e.id;
       var status = e.status ? String(e.status).charAt(0).toUpperCase()+String(e.status).slice(1) : 'Unknown status';
       var totalStr = (e.total !== null && e.total !== undefined && e.total !== '') ? '$'+Number(e.total).toLocaleString() : 'total not on file';
       html += '<div class="est-row">Estimate #'+esc(num)+' &mdash; '+esc(status)+' &mdash; '+esc(totalStr)+'</div>';
     });
+    html += '</div>';
   }
 
-  html += '<div class="section-label">Email history</div>';
+  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Email history</div>';
   if (!threads.length) {
     html += '<div style="font-size:14px;color:var(--muted)">No email threads linked yet.</div>';
   } else {
@@ -632,7 +710,7 @@ function renderLeadCard(l) {
       var tOpen = openThreads.has(t.id);
       var msgs = messagesByThread[t.id] || [];
       html += '<div class="thread'+(t.needs_reply?' flag':'')+'">';
-      html += '<div class="thread-hd" onclick="event.stopPropagation();toggleThread(\''+t.id+'\')">';
+      html += '<div class="thread-hd" onclick="toggleThread(\''+t.id+'\')">';
       if (t.needs_reply) html += '<span class="dot"></span>';
       html += '<span class="thread-subj">'+esc(t.subject||'(no subject)')+'</span>';
       html += '<span class="thread-time">'+timeAgo(t.last_message_at)+'</span></div>';
@@ -641,7 +719,7 @@ function renderLeadCard(l) {
       msgs.slice().reverse().forEach(function(m){
         var eOpen = openEmails.has(m.id);
         var isLast = msgs[msgs.length-1].id === m.id;
-        html += '<div class="msg-row" onclick="event.stopPropagation();toggleEmail(\''+m.id+'\')">';
+        html += '<div class="msg-row" onclick="toggleEmail(\''+m.id+'\')">';
         html += '<div class="msg-top"><span class="msg-who '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'Received':'Sent')+' &mdash; '+esc(m.direction==='inbound'?m.from_address:(m.to_addresses||[])[0]||'')+'</span><span class="msg-when">'+niceDate(m.sent_at)+'</span></div>';
         html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(t.needs_reply && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
         html += '</div>';
@@ -650,29 +728,28 @@ function renderLeadCard(l) {
       html += '</div></div>';
     });
   }
+  html += '</div>';
 
-  html += '<div class="dz">';
+  html += '<div class="ld-card dz" style="margin-top:20px;border-top:none;padding-top:20px">';
   if (showDel.has(l.id)) {
     html += '<span style="font-size:13px;color:var(--danger)">Type DELETE to confirm:</span>';
     html += '<div class="confirm-row"><input type="text" class="confirm-input" id="del-input-'+l.id+'" placeholder="DELETE">';
     html += '<button class="confirm-go" onclick="confirmDelete(\''+l.id+'\')">Delete</button>';
     html += '<button class="confirm-cancel" onclick="cancelDelete(\''+l.id+'\')">Cancel</button></div>';
   } else {
-    html += '<button class="hide-btn" onclick="event.stopPropagation();hideLead(\''+l.id+'\')">Hide</button>';
-    if (!isCold) html += '<button class="cold-btn" onclick="event.stopPropagation();openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
-    html += '<button class="delete-btn" onclick="event.stopPropagation();showDeleteConfirm(\''+l.id+'\')">Delete</button>';
+    html += '<button class="hide-btn" onclick="hideLead(\''+l.id+'\')">Hide</button>';
+    if (!isCold) html += '<button class="cold-btn" onclick="openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
+    html += '<button class="delete-btn" onclick="showDeleteConfirm(\''+l.id+'\')">Delete</button>';
   }
   html += '</div>';
 
-  html += '</div></div>';
-  return html;
+  el.innerHTML = html;
 }
 function prettyStatus(s){ return { new:'New', contacted:'Contacted', quoted:'Quoted', won:'Won', lost:'Lost', cold:'Cold' }[s] || s; }
-function toggleCard(id){ if(openCards.has(id))openCards.delete(id);else openCards.add(id); renderPage(); }
-function toggleThread(id){ if(openThreads.has(id))openThreads.delete(id);else openThreads.add(id); renderPage(); }
+function toggleThread(id){ if(openThreads.has(id))openThreads.delete(id);else openThreads.add(id); renderLeadDetail(); }
 function toggleEmail(id){
   if (openEmails.has(id)) openEmails.delete(id); else openEmails.add(id);
-  renderPage();
+  renderLeadDetail();
   if (openEmails.has(id)) fillEmailFrame(id);
 }
 function fillEmailFrame(msgId) {
@@ -695,16 +772,17 @@ async function setStatus(leadId, status) {
   await sb.from('leads').update({ status: status, updated_at: new Date().toISOString() }).eq('id', leadId);
   var l = leads.find(function(x){return x.id===leadId;}); if (l) l.status = status;
   await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: 'Status changed to ' + status });
-  renderPage(); showToast('Status updated.');
+  renderLeadDetail(); renderPage(); showToast('Status updated.');
 }
 async function hideLead(leadId) {
   await sb.from('leads').update({ archived: true, updated_at: new Date().toISOString() }).eq('id', leadId);
   await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: 'Hidden' });
   showToast('Lead hidden.');
+  closeLeadDetail();
   await loadAll();
 }
-function showDeleteConfirm(id){ showDel.add(id); renderPage(); }
-function cancelDelete(id){ showDel.delete(id); renderPage(); }
+function showDeleteConfirm(id){ showDel.add(id); renderLeadDetail(); }
+function cancelDelete(id){ showDel.delete(id); renderLeadDetail(); }
 async function confirmDelete(id) {
   var val = document.getElementById('del-input-'+id);
   if (!val || val.value.trim() !== 'DELETE') { showToast('Type DELETE in all caps to confirm.'); return; }
@@ -712,6 +790,7 @@ async function confirmDelete(id) {
   await sb.from('leads').delete().eq('id', id);
   showDel.delete(id);
   showToast('Lead deleted. Email history is kept, just unlinked.');
+  closeLeadDetail();
   await loadAll();
 }
 
@@ -766,6 +845,7 @@ async function confirmMarkCold() {
     var data = await callLeadFn({ action: 'mark_cold', lead_id: leadId });
     if (data.error) { showToast('Could not mark as cold: ' + data.error); document.getElementById('cold-confirm-btn').disabled = false; document.getElementById('cold-confirm-btn').textContent = 'Mark as cold lead'; return; }
     closeColdModal();
+    closeLeadDetail();
     showToast('Moved to Cold leads.');
     await loadAll();
   } catch (e) {
@@ -835,10 +915,13 @@ function presStep(dir) {
   presIndex = next; renderPresSlide();
 }
 document.addEventListener('keydown', function(e){
-  if (!document.getElementById('presentation').classList.contains('open')) return;
-  if (e.key === 'ArrowRight') presStep(1);
-  if (e.key === 'ArrowLeft') presStep(-1);
-  if (e.key === 'Escape') closePresentation();
+  if (document.getElementById('presentation').classList.contains('open')) {
+    if (e.key === 'ArrowRight') presStep(1);
+    if (e.key === 'ArrowLeft') presStep(-1);
+    if (e.key === 'Escape') closePresentation();
+    return;
+  }
+  if (e.key === 'Escape' && document.getElementById('lead-detail').classList.contains('open')) closeLeadDetail();
 });
 function togglePresAutoplay() {
   if (presPlaying) stopPresAutoplay(); else startPresAutoplay();
@@ -874,7 +957,12 @@ async function silentRefresh() {
   var active = document.activeElement;
   var isTyping = active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA');
   var presOpen = document.getElementById('presentation').classList.contains('open');
-  try { if (!isTyping && !presOpen) await loadAll(); } catch(e) {}
+  try {
+    if (!isTyping && !presOpen) {
+      await loadAll();
+      if (currentDetailLeadId) renderLeadDetail();
+    }
+  } catch(e) {}
   refreshing = false;
 }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
