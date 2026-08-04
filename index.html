@@ -491,13 +491,23 @@ async function loadGmailAccounts() {
     gmailAccounts = data.accounts || [];
   } catch (e) { gmailAccounts = []; }
 }
-async function callLeadFn(payload) {
-  var res = await fetch(LEAD_HCP_SYNC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
-    body: JSON.stringify(payload)
-  });
-  return res.json();
+async function callLeadFn(payload, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, timeoutMs || 30000);
+  try {
+    var res = await fetch(LEAD_HCP_SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    return await res.json();
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Request timed out — the server took too long to respond. Try again in a moment.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 async function syncHCP() {
   showToast('Syncing from Housecall Pro...');
@@ -510,7 +520,7 @@ async function syncHCP() {
 async function syncLeadEmails() {
   showToast('Searching Gmail for each lead’s email history… this can take a bit.');
   try {
-    var data = await callLeadFn({ action: 'sync_lead_emails' });
+    var data = await callLeadFn({ action: 'sync_lead_emails' }, 60000);
     if (data.error) { showToast('Email sync failed: ' + data.error); return; }
     var msg = 'Found ' + (data.messages_found||0) + ', stored ' + (data.messages_stored||0) + ' new email(s) across ' + (data.leads_checked||0) + ' lead(s).';
     if (data.capped_out) msg += ' Hit this run’s cap — click Sync emails again to keep going.';
@@ -867,10 +877,17 @@ async function openPresentation() {
   presIndex = 0;
   document.getElementById('presentation').classList.add('open');
   renderPresSlide();
-  // Generate any missing overviews in the background, one at a time,
-  // re-rendering the current slide if it's the one that just finished.
+  // Generate any missing OR stale overviews in the background, one at a
+  // time, re-rendering the current slide if it's the one that just
+  // finished. "Stale" means the lead has email activity newer than the
+  // last time we asked Gemini for a summary — otherwise a lead synced
+  // with an old empty-inbox overview would show that forever even after
+  // real emails came in.
   presLeads.forEach(function(l){
-    if (!l.ai_overview) {
+    var threads = threadsByLead[l.id] || [];
+    var latestActivity = threads.length ? threads[0].last_message_at : null;
+    var stale = !l.ai_overview || (latestActivity && (!l.ai_overview_generated_at || new Date(latestActivity) > new Date(l.ai_overview_generated_at)));
+    if (stale) {
       callLeadFn({ action: 'generate_overview', lead_id: l.id }).then(function(res){
         if (res && res.overview) {
           l.ai_overview = res.overview;
