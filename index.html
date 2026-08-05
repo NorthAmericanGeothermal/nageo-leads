@@ -594,7 +594,11 @@ function niceDate(ts){
   if (!ts) return '';
   return new Date(ts).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
 }
-function leadReplyCount(leadId){ return (threadsByLead[leadId]||[]).filter(function(t){return t.needs_reply;}).length; }
+function leadReplyCount(leadId){
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (l && l.status === 'cold') return 0;
+  return (threadsByLead[leadId]||[]).filter(function(t){return t.needs_reply;}).length;
+}
 function digitsOnly(s){ return (s||'').replace(/[^0-9]/g,''); }
 
 // ── Leads list ────────────────────────────────────────────────────────────
@@ -637,7 +641,7 @@ function renderLeadTile(l) {
   if (l.address) html += '<div class="tile-row">'+ICONS.pin+'<span>'+esc(l.address)+'</span></div>';
   if (estimates.length) html += '<div class="tile-row">'+ICONS.file+'<span>'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+' on file</span></div>';
   var latestFlagged = null;
-  threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
+  if (!isCold) threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
   if (latestFlagged) html += '<div class="tile-row flag">'+ICONS.mail+'<span>Last email '+timeAgo(latestFlagged.last_message_at)+' &mdash; no reply yet</span></div>';
   else if (threads.length) html += '<div class="tile-row">'+ICONS.mail+'<span>Last contact '+timeAgo(threads[0].last_message_at)+'</span></div>';
   else html += '<div class="tile-row">'+ICONS.mail+'<span>No email history yet</span></div>';
@@ -683,7 +687,7 @@ function renderLeadDetail() {
   html += '</div></div>';
 
   var latestFlagged = null;
-  threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
+  if (!isCold) threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
   if (latestFlagged) html += '<div class="tile-row flag" style="font-size:16px;margin-bottom:4px">Last email '+timeAgo(latestFlagged.last_message_at)+' &mdash; nobody has replied yet.</div>';
   else if (threads.length) html += '<div class="tile-row" style="font-size:16px;margin-bottom:4px">Last contact '+timeAgo(threads[0].last_message_at)+'.</div>';
 
@@ -708,7 +712,9 @@ function renderLeadDetail() {
     html += '</div></div>';
   }
 
-  html += '<div class="ld-card"><div class="section-label" style="margin-top:0;display:flex;justify-content:space-between;align-items:center">Estimates<button class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted)" onclick="refreshEstimates(\''+l.id+'\')" id="est-refresh-'+l.id+'">Refresh</button></div>';
+  html += '<div class="ld-card"><div class="section-label" style="margin-top:0;display:flex;justify-content:space-between;align-items:center">Estimates<span style="display:flex;gap:6px">';
+  if (l.hcp_customer_id) html += '<a class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted);text-decoration:none" href="https://pro.housecallpro.com/customers/'+esc(l.hcp_customer_id)+'" target="_blank" rel="noopener">Open in HCP &#8599;</a>';
+  html += '<button class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted)" onclick="refreshEstimates(\''+l.id+'\')" id="est-refresh-'+l.id+'">Refresh</button></span></div>';
   if (!estimates.length) {
     html += '<div style="font-size:14px;color:var(--muted)">No estimates on file yet.</div>';
   } else {
@@ -751,9 +757,10 @@ function renderLeadDetail() {
     threads.forEach(function(t){
       var tOpen = openThreads.has(t.id);
       var msgs = messagesByThread[t.id] || [];
-      html += '<div class="thread'+(t.needs_reply?' flag':'')+'">';
+      var flagged = t.needs_reply && !isCold;
+      html += '<div class="thread'+(flagged?' flag':'')+'">';
       html += '<div class="thread-hd" onclick="toggleThread(\''+t.id+'\')">';
-      if (t.needs_reply) html += '<span class="dot"></span>';
+      if (flagged) html += '<span class="dot"></span>';
       html += '<span class="thread-subj">'+esc(t.subject||'(no subject)')+'</span>';
       html += '<span class="thread-time">'+timeAgo(t.last_message_at)+'</span></div>';
       html += '<div class="msgs'+(tOpen?' open':'')+'">';
@@ -763,7 +770,7 @@ function renderLeadDetail() {
         var isLast = msgs[msgs.length-1].id === m.id;
         html += '<div class="msg-row" onclick="toggleEmail(\''+m.id+'\')">';
         html += '<div class="msg-top"><span class="msg-who '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'Received':'Sent')+' &mdash; '+esc(m.direction==='inbound'?m.from_address:(m.to_addresses||[])[0]||'')+'</span><span class="msg-when">'+niceDate(m.sent_at)+'</span></div>';
-        html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(t.needs_reply && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
+        html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(flagged && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
         html += '</div>';
         html += '<div class="full-email'+(eOpen?' open':'')+'" id="fe-'+m.id+'"></div>';
       });
