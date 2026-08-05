@@ -70,7 +70,10 @@ svg{display:block;}
 .search-row input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint);}
 
 /* ── Lead tiles (grid) ── */
-.leads{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start;}
+.leads{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start;margin-bottom:8px;}
+.section-heading{font-size:15px;font-weight:700;color:var(--ink);margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+.section-heading:not(:first-child){margin-top:32px;}
+.section-count{font-size:12px;font-weight:600;color:var(--muted);background:var(--surface-alt);padding:3px 10px;border-radius:999px;}
 .tile{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:20px 22px;cursor:pointer;transition:box-shadow .15s,transform .1s;}
 .tile:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
 .tile.flag{box-shadow:var(--shadow-sm),inset 4px 0 0 var(--danger);}
@@ -258,7 +261,7 @@ svg{display:block;}
     </div>
 
     <div class="search-row" id="search-row-icon"><input type="text" id="search-input" placeholder="Search by name or phone" oninput="renderPage()"></div>
-    <div class="leads" id="leads-list"></div>
+    <div id="leads-list"></div>
   </div>
 </div>
 
@@ -643,7 +646,28 @@ function renderPage() {
       : 'No leads yet. Click "Sync HCP" to pull customers tagged "'+esc(appSettings.leadHcpTag||'Prospect')+'".') + '</div>';
     return;
   }
-  el.innerHTML = list.map(renderLeadTile).join('');
+  if (currentPage === 'active') {
+    // Retrofit, then Replacement, then New Construction — any section with
+    // zero leads is skipped entirely rather than shown empty. Anything not
+    // yet categorized (job_type not set) gets its own trailing section so
+    // older/uncategorized leads never just disappear from view.
+    var groups = [
+      { key: 'retrofit', label: 'Retrofit' },
+      { key: 'replacement', label: 'Replacement' },
+      { key: 'new_construction', label: 'New Construction' },
+      { key: null, label: 'Uncategorized' },
+    ];
+    var html = '';
+    groups.forEach(function(g){
+      var groupLeads = list.filter(function(l){ return (l.job_type || null) === g.key; });
+      if (!groupLeads.length) return;
+      html += '<div class="section-heading">'+esc(g.label)+' <span class="section-count">'+groupLeads.length+'</span></div>';
+      html += '<div class="leads">'+groupLeads.map(renderLeadTile).join('')+'</div>';
+    });
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = '<div class="leads">'+list.map(renderLeadTile).join('')+'</div>';
+  }
 }
 function renderLeadTile(l) {
   var replyCount = leadReplyCount(l.id);
