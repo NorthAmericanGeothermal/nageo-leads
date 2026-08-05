@@ -723,10 +723,13 @@ function renderLeadDetail() {
       var status = e.status ? String(e.status).charAt(0).toUpperCase()+String(e.status).slice(1) : '';
       var approval = e.approval_status ? prettyApproval(e.approval_status) : '';
       var totalStr = (e.total !== null && e.total !== undefined && e.total !== '') ? '$'+Number(e.total).toLocaleString() : 'Total not on file';
-      var estUrl = e.id ? 'https://pro.housecallpro.com/app/estimates/'+encodeURIComponent(e.id) : '';
-      var estTag = estUrl ? 'a' : 'div';
-      html += '<'+estTag+' class="est-row" '+(estUrl ? 'href="'+esc(estUrl)+'" target="_blank" rel="noopener" ' : '')+'style="display:flex;flex-direction:column;gap:4px;padding:14px 16px;text-decoration:none;color:inherit;'+(estUrl?'cursor:pointer':'')+'">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-weight:700">Estimate #'+esc(num)+(estUrl?' &#8599;':'')+'</span><span style="font-weight:700">'+esc(totalStr)+'</span></div>';
+      // NOTE: no deep link to the individual estimate yet — e.id turned out
+      // not to be the real estimate ID HCP's app uses in its own URLs (it
+      // produced a "csr_..." value instead of the expected "est_...").
+      // Re-add once the correct field is confirmed from a Logs tab check.
+      var estTag = 'div';
+      html += '<'+estTag+' class="est-row" style="display:flex;flex-direction:column;gap:4px;padding:14px 16px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-weight:700">Estimate #'+esc(num)+'</span><span style="font-weight:700">'+esc(totalStr)+'</span></div>';
       var metaBits = [];
       if (status) metaBits.push(status);
       if (approval) metaBits.push(approval);
