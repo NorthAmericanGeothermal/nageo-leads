@@ -119,6 +119,12 @@ svg{display:block;}
 .schip{padding:7px 15px;font-size:13px;border-radius:999px;border:1px solid var(--border);background:var(--surface);cursor:pointer;color:var(--muted);font-weight:600;transition:background .15s,color .15s,border-color .15s;}
 .schip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 .est-row{font-size:15px;color:var(--ink);padding:10px 14px;background:var(--surface-alt);border-radius:12px;margin-bottom:6px;}
+.notes-existing{font-size:14px;color:var(--ink);white-space:pre-wrap;background:var(--surface-alt);border-radius:12px;padding:14px 16px;margin-bottom:14px;line-height:1.55;}
+.note-textarea{width:100%;min-height:76px;padding:13px 15px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-alt);font-family:inherit;font-size:15px;resize:vertical;transition:box-shadow .15s,border-color .15s;}
+.note-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint);}
+.note-hint{font-size:12px;color:var(--muted);margin:6px 0 10px;}
+.note-btn{margin-top:2px;padding:11px 18px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer;}
+.note-btn:disabled{opacity:0.5;cursor:not-allowed;}
 .section-label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin:18px 0 10px;}
 
 .thread{border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:10px;overflow:hidden;}
@@ -712,6 +718,14 @@ function renderLeadDetail() {
     html += '</div>';
   }
 
+  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Notes</div>';
+  var existingNoteText = (l.hcp_notes && l.hcp_notes[0] && l.hcp_notes[0].text) ? String(l.hcp_notes[0].text).trim() : '';
+  if (existingNoteText) html += '<div class="notes-existing">'+esc(existingNoteText)+'</div>';
+  html += '<textarea class="note-textarea" id="note-input-'+l.id+'" placeholder="Add a note..."></textarea>';
+  html += '<div class="note-hint">Posted straight to this customer\'s Housecall Pro profile notes.</div>';
+  html += '<button class="note-btn" id="note-btn-'+l.id+'" onclick="addNote(\''+l.id+'\')">Add note</button>';
+  html += '</div>';
+
   html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Email history</div>';
   if (!threads.length) {
     html += '<div style="font-size:14px;color:var(--muted)">No email threads linked yet.</div>';
@@ -783,6 +797,28 @@ async function setStatus(leadId, status) {
   var l = leads.find(function(x){return x.id===leadId;}); if (l) l.status = status;
   await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: 'Status changed to ' + status });
   renderLeadDetail(); renderPage(); showToast('Status updated.');
+}
+async function addNote(leadId) {
+  var ta = document.getElementById('note-input-'+leadId);
+  var text = (ta.value || '').trim();
+  if (!text) { showToast('Write something first.'); return; }
+  var btn = document.getElementById('note-btn-'+leadId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    var data = await callLeadFn({ action: 'add_note', lead_id: leadId, note: text, author: currentUser.name });
+    if (data.error) {
+      showToast('Could not save note: ' + data.error);
+      if (btn) { btn.disabled = false; btn.textContent = 'Add note'; }
+      return;
+    }
+    var l = leads.find(function(x){return x.id===leadId;});
+    if (l && data.lead) l.hcp_notes = data.lead.hcp_notes;
+    showToast('Note posted to HCP.');
+    renderLeadDetail();
+  } catch (e) {
+    showToast('Could not save note.'); console.error(e);
+    if (btn) { btn.disabled = false; btn.textContent = 'Add note'; }
+  }
 }
 async function hideLead(leadId) {
   await sb.from('leads').update({ archived: true, updated_at: new Date().toISOString() }).eq('id', leadId);
