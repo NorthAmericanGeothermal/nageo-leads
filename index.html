@@ -89,6 +89,7 @@ svg{display:block;}
 .badge-flag{background:var(--danger-tint);color:var(--danger-text);}
 .badge-est{background:var(--success-tint);color:var(--success-text);}
 .badge-cold{background:var(--surface-alt);color:var(--muted);}
+.badge-hold{background:var(--warning-tint);color:var(--warning-text);}
 .call-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;height:48px;background:var(--accent);color:#fff;border-radius:var(--radius-md);font-size:15px;font-weight:600;text-decoration:none;border:none;cursor:pointer;box-shadow:var(--shadow-sm);transition:background .15s;}
 .call-btn svg{width:17px;height:17px;}
 .call-btn:hover{background:var(--accent-dark);}
@@ -152,11 +153,12 @@ svg{display:block;}
 .fe-frame{width:100%;border:none;background:#fff;border-radius:12px;}
 
 .dz{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:18px;border-top:1px solid var(--border);}
-.hide-btn,.delete-btn,.cold-btn,.reactivate-btn{font-size:13px;padding:9px 15px;border-radius:999px;cursor:pointer;font-weight:600;border:none;}
+.hide-btn,.delete-btn,.cold-btn,.reactivate-btn,.hold-btn{font-size:13px;padding:9px 15px;border-radius:999px;cursor:pointer;font-weight:600;border:none;}
 .hide-btn{background:var(--surface-alt);color:var(--muted);}
 .delete-btn{background:var(--danger-tint);color:var(--danger-text);}
 .cold-btn{background:var(--warning-tint);color:var(--warning-text);}
 .reactivate-btn{background:var(--sage-tint);color:var(--sage-text);}
+.hold-btn{background:var(--accent-tint);color:var(--accent-text);}
 .confirm-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .confirm-input{font-size:13px;padding:8px 11px;border:1px solid var(--border);border-radius:999px;width:110px;background:var(--surface-alt);}
 .confirm-go{font-size:13px;padding:9px 15px;border:none;border-radius:999px;background:var(--danger);color:#fff;cursor:pointer;font-weight:600;}
@@ -248,6 +250,7 @@ svg{display:block;}
 
     <div class="tabs">
       <button class="tab active" id="tab-active" onclick="setPage('active')">Active leads</button>
+      <button class="tab" id="tab-onhold" onclick="setPage('on_hold')">On hold</button>
       <button class="tab" id="tab-cold" onclick="setPage('cold')">Cold leads</button>
     </div>
 
@@ -263,6 +266,10 @@ svg{display:block;}
     <div class="modal-row">
       <div class="modal-label">HCP tag for active leads</div>
       <input type="text" class="modal-input" id="hcp-tag-input" placeholder="e.g. Prospect">
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">HCP tag for on-hold leads</div>
+      <input type="text" class="modal-input" id="onhold-tag-input" placeholder="e.g. On Hold">
     </div>
     <div class="modal-row">
       <div class="modal-label">HCP tag for cold leads</div>
@@ -452,6 +459,7 @@ async function loadSettings() {
 }
 function openSettings() {
   document.getElementById('hcp-tag-input').value = appSettings.leadHcpTag || 'Prospect';
+  document.getElementById('onhold-tag-input').value = appSettings.onHoldTag || 'On Hold';
   document.getElementById('cold-tag-input').value = appSettings.coldLeadTag || 'Cold Lead';
   renderGmail();
   document.getElementById('settings-modal').classList.add('open');
@@ -459,9 +467,11 @@ function openSettings() {
 function closeSettings(){ document.getElementById('settings-modal').classList.remove('open'); }
 async function saveSettings() {
   var tag = document.getElementById('hcp-tag-input').value.trim() || 'Prospect';
+  var onHoldTag = document.getElementById('onhold-tag-input').value.trim() || 'On Hold';
   var coldTag = document.getElementById('cold-tag-input').value.trim() || 'Cold Lead';
-  appSettings.leadHcpTag = tag; appSettings.coldLeadTag = coldTag;
+  appSettings.leadHcpTag = tag; appSettings.onHoldTag = onHoldTag; appSettings.coldLeadTag = coldTag;
   await sb.from('settings').upsert({ key: 'leadHcpTag', value: tag });
+  await sb.from('settings').upsert({ key: 'onHoldTag', value: onHoldTag });
   await sb.from('settings').upsert({ key: 'coldLeadTag', value: coldTag });
   closeSettings(); showToast('Settings saved.');
 }
@@ -569,12 +579,13 @@ function renderGmail() {
 function setPage(p){
   currentPage = p;
   document.getElementById('tab-active').className = 'tab' + (p==='active' ? ' active' : '');
+  document.getElementById('tab-onhold').className = 'tab' + (p==='on_hold' ? ' active' : '');
   document.getElementById('tab-cold').className = 'tab' + (p==='cold' ? ' active' : '');
   renderPage();
 }
 function render(){ updateStats(); renderPage(); }
 function updateStats() {
-  var active = leads.filter(function(l){return l.status!=='cold';});
+  var active = leads.filter(function(l){return l.status!=='cold' && l.status!=='on_hold';});
   var reply = 0;
   active.forEach(function(l){ (threadsByLead[l.id]||[]).forEach(function(t){ if (t.needs_reply) reply++; }); });
   document.getElementById('s-reply').textContent = reply;
@@ -604,7 +615,11 @@ function digitsOnly(s){ return (s||'').replace(/[^0-9]/g,''); }
 // ── Leads list ────────────────────────────────────────────────────────────
 function renderPage() {
   var q = (document.getElementById('search-input').value || '').toLowerCase();
-  var pool = leads.filter(function(l){ return currentPage==='cold' ? l.status==='cold' : l.status!=='cold'; });
+  var pool = leads.filter(function(l){
+    if (currentPage==='cold') return l.status==='cold';
+    if (currentPage==='on_hold') return l.status==='on_hold';
+    return l.status!=='cold' && l.status!=='on_hold';
+  });
   var list = pool.filter(function(l){
     if (!q) return true;
     var hay = ((l.customer_name||'')+' '+(l.phone||'')+' '+(l.primary_email||'')).toLowerCase();
@@ -620,6 +635,8 @@ function renderPage() {
   if (!list.length) {
     el.innerHTML = '<div class="empty">' + (currentPage==='cold'
       ? 'No cold leads yet.'
+      : currentPage==='on_hold'
+      ? 'No leads on hold.'
       : 'No leads yet. Click "Sync HCP" to pull customers tagged "'+esc(appSettings.leadHcpTag||'Prospect')+'".') + '</div>';
     return;
   }
@@ -630,9 +647,11 @@ function renderLeadTile(l) {
   var threads = threadsByLead[l.id] || [];
   var estimates = l.estimates || [];
   var isCold = l.status === 'cold';
+  var isOnHold = l.status === 'on_hold';
   var html = '<div class="tile'+(replyCount>0?' flag':'')+'" onclick="openLeadDetail(\''+l.id+'\')">';
   html += '<div class="tile-top"><div class="tile-name">'+esc(l.customer_name||'Unknown')+'</div><div class="badges">';
   if (isCold) html += '<span class="badge badge-cold">Cold</span>';
+  else if (isOnHold) html += '<span class="badge badge-hold">On hold</span>';
   else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Reply needed</span>';
   html += '</div></div>';
@@ -677,10 +696,12 @@ function renderLeadDetail() {
   var threads = threadsByLead[l.id] || [];
   var estimates = l.estimates || [];
   var isCold = l.status === 'cold';
+  var isOnHold = l.status === 'on_hold';
   var replyCount = leadReplyCount(l.id);
 
   var html = '<div class="ld-name-row"><div class="ld-name">'+esc(l.customer_name||'Unknown')+'</div><div class="badges">';
   if (isCold) html += '<span class="badge badge-cold">Cold lead</span>';
+  else if (isOnHold) html += '<span class="badge badge-hold">On hold</span>';
   else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
   if (estimates.length) html += '<span class="badge badge-est">'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Needs a reply</span>';
@@ -704,7 +725,7 @@ function renderLeadDetail() {
     html += '</div>';
   }
 
-  if (!isCold) {
+  if (!isCold && !isOnHold) {
     html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Status</div><div class="status-chips">';
     ['new','contacted','quoted','won','lost'].forEach(function(s){
       html += '<button class="schip'+(l.status===s?' active':'')+'" onclick="setStatus(\''+l.id+'\',\''+s+'\')">'+prettyStatus(s)+'</button>';
@@ -792,15 +813,22 @@ function renderLeadDetail() {
     html += '<button class="confirm-cancel" onclick="cancelDelete(\''+l.id+'\')">Cancel</button></div>';
   } else {
     html += '<button class="hide-btn" onclick="hideLead(\''+l.id+'\')">Hide</button>';
-    if (!isCold) html += '<button class="cold-btn" onclick="openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
-    else html += '<button class="reactivate-btn" onclick="openReactivateModal(\''+l.id+'\')">Move back to active</button>';
+    if (isCold) {
+      html += '<button class="reactivate-btn" onclick="openReactivateModal(\''+l.id+'\')">Move back to active</button>';
+    } else if (isOnHold) {
+      html += '<button class="reactivate-btn" onclick="openReactivateModal(\''+l.id+'\')">Move back to active</button>';
+      html += '<button class="cold-btn" onclick="openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
+    } else {
+      html += '<button class="hold-btn" onclick="putOnHold(\''+l.id+'\')">Put on hold</button>';
+      html += '<button class="cold-btn" onclick="openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
+    }
     html += '<button class="delete-btn" onclick="showDeleteConfirm(\''+l.id+'\')">Delete</button>';
   }
   html += '</div>';
 
   el.innerHTML = html;
 }
-function prettyStatus(s){ return { new:'New', contacted:'Contacted', quoted:'Quoted', won:'Won', lost:'Lost', cold:'Cold' }[s] || s; }
+function prettyStatus(s){ return { new:'New', contacted:'Contacted', quoted:'Quoted', won:'Won', lost:'Lost', cold:'Cold', on_hold:'On hold' }[s] || s; }
 function prettyApproval(s){ return { pro_approved:'Pro approved', customer_approved:'Customer approved', declined:'Declined', pending:'Pending' }[s] || s; }
 async function refreshEstimates(leadId) {
   var l = leads.find(function(x){return x.id===leadId;}); if (!l || !l.hcp_customer_id) return;
@@ -934,14 +962,29 @@ function openReactivateModal(leadId) {
   var l = leads.find(function(x){return x.id===leadId;}); if (!l) return;
   coldModalMode = 'active';
   coldModalLeadId = leadId;
+  var fromLabel = l.status === 'on_hold' ? 'the on-hold tag' : 'the cold-lead tag';
   document.getElementById('cold-modal-title').textContent = 'Move back to active leads?';
-  document.getElementById('cold-modal-desc').innerHTML = 'This removes the cold-lead tag in Housecall Pro, adds the active-lead tag back, and moves <strong id="cold-modal-name" style="color:var(--ink)"></strong> back to Active leads as a new lead.';
+  document.getElementById('cold-modal-desc').innerHTML = 'This removes '+fromLabel+' in Housecall Pro, adds the active-lead tag back, and moves <strong id="cold-modal-name" style="color:var(--ink)"></strong> back to Active leads as a new lead.';
   document.getElementById('cold-modal-name').textContent = l.customer_name;
   document.getElementById('cold-pin-input').value = '';
   document.getElementById('cold-name-input').value = '';
   document.getElementById('cold-confirm-btn').disabled = true;
   document.getElementById('cold-confirm-btn').textContent = 'Move back to active';
   document.getElementById('cold-modal').classList.add('open');
+}
+async function putOnHold(leadId) {
+  var l = leads.find(function(x){return x.id===leadId;}); if (!l) return;
+  if (!confirm('Put ' + l.customer_name + ' on hold? This keeps the active tag in Housecall Pro and adds an On Hold tag alongside it.')) return;
+  showToast('Putting on hold...');
+  try {
+    var data = await callLeadFn({ action: 'mark_on_hold', lead_id: leadId });
+    if (data.error) { showToast('Could not put on hold: ' + data.error); return; }
+    closeLeadDetail();
+    showToast('Moved to On Hold.');
+    await loadAll();
+  } catch (e) {
+    showToast('Could not put on hold.'); console.error(e);
+  }
 }
 function closeColdModal(){ document.getElementById('cold-modal').classList.remove('open'); coldModalLeadId = null; }
 function checkColdModalReady() {
