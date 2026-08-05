@@ -401,7 +401,7 @@ initIcons();
 var currentUser = null, users = [];
 var leads = [], gmailAccounts = [];
 var openThreads = new Set(), openEmails = new Set(), showDel = new Set();
-var threadsByLead = {}, messagesByThread = {};
+var threadsByLead = {}, messagesByThread = {}, notesByLead = {};
 var currentPage = 'active';
 var appSettings = {};
 var coldModalLeadId = null;
@@ -487,8 +487,18 @@ async function loadAll() {
   var r = await sb.from('leads').select('*').eq('archived', false).order('created_at', { ascending: false });
   leads = r.data || [];
   await loadThreadsForLeads(leads);
+  await loadNotesForLeads(leads);
   await loadGmailAccounts();
   render();
+}
+// Notes are local-only (see lead-hcp-sync.ts header) — each one is its own
+// row in lead_activity_log with action "Added note", not a single blob.
+async function loadNotesForLeads(allLeads) {
+  notesByLead = {};
+  var ids = allLeads.map(function(l){return l.id;});
+  if (!ids.length) return;
+  var r = await sb.from('lead_activity_log').select('*').in('lead_id', ids).eq('action', 'Added note').order('created_at', { ascending: true });
+  (r.data || []).forEach(function(n){ if (!notesByLead[n.lead_id]) notesByLead[n.lead_id] = []; notesByLead[n.lead_id].push(n); });
 }
 async function loadThreadsForLeads(allLeads) {
   threadsByLead = {}; messagesByThread = {};
@@ -803,10 +813,19 @@ function renderLeadDetail() {
   html += '</div>';
 
   html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Notes</div>';
-  var existingNoteText = (l.hcp_notes && l.hcp_notes[0] && l.hcp_notes[0].text) ? String(l.hcp_notes[0].text).trim() : '';
-  if (existingNoteText) html += '<div class="notes-existing">'+esc(existingNoteText)+'</div>';
+  // Read-only context imported from HCP at the last sync (whatever was in
+  // the customer's notes field back then) — kept separate from the note
+  // thread below, which is local-only from here on.
+  var importedNoteText = (l.hcp_notes && l.hcp_notes[0] && l.hcp_notes[0].text) ? String(l.hcp_notes[0].text).trim() : '';
+  if (importedNoteText) {
+    html += '<div class="notes-existing"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Imported from Housecall Pro</div>'+esc(importedNoteText)+'</div>';
+  }
+  var leadNotes = notesByLead[l.id] || [];
+  leadNotes.forEach(function(n){
+    html += '<div class="notes-existing"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">'+esc(n.user_name||'Dashboard')+' &middot; '+niceDate(n.created_at)+'</div>'+esc(n.detail||'')+'</div>';
+  });
   html += '<textarea class="note-textarea" id="note-input-'+l.id+'" placeholder="Add a note..."></textarea>';
-  html += '<div class="note-hint">Posted straight to this customer\'s Housecall Pro profile notes.</div>';
+  html += '<div class="note-hint">Saved here on the dashboard — not pushed to Housecall Pro.</div>';
   html += '<button class="note-btn" id="note-btn-'+l.id+'" onclick="addNote(\''+l.id+'\')">Add note</button>';
   html += '</div>';
 
@@ -919,6 +938,8 @@ async function setJobType(leadId, jobType) {
   await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: newType ? 'Job type set to ' + prettyJobType(newType) : 'Job type cleared' });
   renderLeadDetail(); renderPage(); showToast(newType ? 'Job type set.' : 'Job type cleared.');
 }
+// Local-only — writes straight to lead_activity_log, no edge function call
+// and nothing pushed to Housecall Pro (see lead-hcp-sync.ts header for why).
 async function addNote(leadId) {
   var ta = document.getElementById('note-input-'+leadId);
   var text = (ta.value || '').trim();
@@ -926,18 +947,17 @@ async function addNote(leadId) {
   var btn = document.getElementById('note-btn-'+leadId);
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
   try {
-    var data = await callLeadFn({ action: 'add_note', lead_id: leadId, note: text, author: currentUser.name });
-    if (data.error) {
-      showToast('Could not save note: ' + data.error);
-      if (btn) { btn.disabled = false; btn.textContent = 'Add note'; }
-      return;
-    }
-    var l = leads.find(function(x){return x.id===leadId;});
-    if (l && data.lead) l.hcp_notes = data.lead.hcp_notes;
-    showToast('Note posted to HCP.');
+    var res = await sb.from('lead_activity_log').insert({
+      lead_id: leadId, user_name: currentUser.name, action: 'Added note', detail: text,
+    }).select().single();
+    if (res.error) { showToast('Could not save note: ' + res.error.message); return; }
+    if (!notesByLead[leadId]) notesByLead[leadId] = [];
+    notesByLead[leadId].push(res.data);
+    showToast('Note added.');
     renderLeadDetail();
   } catch (e) {
     showToast('Could not save note.'); console.error(e);
+  } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Add note'; }
   }
 }
