@@ -708,16 +708,33 @@ function renderLeadDetail() {
     html += '</div></div>';
   }
 
-  if (estimates.length) {
-    html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Estimates</div>';
+  html += '<div class="ld-card"><div class="section-label" style="margin-top:0;display:flex;justify-content:space-between;align-items:center">Estimates<button class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted)" onclick="refreshEstimates(\''+l.id+'\')" id="est-refresh-'+l.id+'">Refresh</button></div>';
+  if (!estimates.length) {
+    html += '<div style="font-size:14px;color:var(--muted)">No estimates on file yet.</div>';
+  } else {
     estimates.forEach(function(e){
       var num = e.estimate_number || e.id;
-      var status = e.status ? String(e.status).charAt(0).toUpperCase()+String(e.status).slice(1) : 'Unknown status';
-      var totalStr = (e.total !== null && e.total !== undefined && e.total !== '') ? '$'+Number(e.total).toLocaleString() : 'total not on file';
-      html += '<div class="est-row">Estimate #'+esc(num)+' &mdash; '+esc(status)+' &mdash; '+esc(totalStr)+'</div>';
+      var status = e.status ? String(e.status).charAt(0).toUpperCase()+String(e.status).slice(1) : '';
+      var approval = e.approval_status ? prettyApproval(e.approval_status) : '';
+      var totalStr = (e.total !== null && e.total !== undefined && e.total !== '') ? '$'+Number(e.total).toLocaleString() : 'Total not on file';
+      html += '<div class="est-row" style="display:flex;flex-direction:column;gap:4px;padding:14px 16px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-weight:700">Estimate #'+esc(num)+'</span><span style="font-weight:700">'+esc(totalStr)+'</span></div>';
+      var metaBits = [];
+      if (status) metaBits.push(status);
+      if (approval) metaBits.push(approval);
+      if (e.sent_at) metaBits.push('Sent '+niceDate(e.sent_at));
+      if (e.approved_at) metaBits.push('Approved '+niceDate(e.approved_at));
+      if (metaBits.length) html += '<div style="font-size:13px;color:var(--muted)">'+esc(metaBits.join(' · '))+'</div>';
+      if (e.options && e.options.length > 1) {
+        html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">'+esc(e.options.map(function(o){
+          var oTotal = (o.total !== null && o.total !== undefined) ? '$'+Number(o.total).toLocaleString() : 'n/a';
+          return (o.name||'Option')+': '+oTotal;
+        }).join(' · '))+'</div>';
+      }
+      html += '</div>';
     });
-    html += '</div>';
   }
+  html += '</div>';
 
   html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Notes</div>';
   var existingNoteText = (l.hcp_notes && l.hcp_notes[0] && l.hcp_notes[0].text) ? String(l.hcp_notes[0].text).trim() : '';
@@ -772,6 +789,24 @@ function renderLeadDetail() {
   el.innerHTML = html;
 }
 function prettyStatus(s){ return { new:'New', contacted:'Contacted', quoted:'Quoted', won:'Won', lost:'Lost', cold:'Cold' }[s] || s; }
+function prettyApproval(s){ return { pro_approved:'Pro approved', customer_approved:'Customer approved', declined:'Declined', pending:'Pending' }[s] || s; }
+async function refreshEstimates(leadId) {
+  var l = leads.find(function(x){return x.id===leadId;}); if (!l || !l.hcp_customer_id) return;
+  var btn = document.getElementById('est-refresh-'+leadId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Refreshing...'; }
+  try {
+    var data = await callLeadFn({ action: 'get_estimates', hcp_customer_id: l.hcp_customer_id });
+    if (data.error) { showToast('Could not refresh estimates: ' + data.error); return; }
+    l.estimates = data.estimates || [];
+    l.estimate_ids = l.estimates.map(function(e){return String(e.id);});
+    showToast('Estimates refreshed.');
+    renderLeadDetail();
+  } catch (e) {
+    showToast('Could not refresh estimates.'); console.error(e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+  }
+}
 function toggleThread(id){ if(openThreads.has(id))openThreads.delete(id);else openThreads.add(id); renderLeadDetail(); }
 function toggleEmail(id){
   if (openEmails.has(id)) openEmails.delete(id); else openEmails.add(id);
