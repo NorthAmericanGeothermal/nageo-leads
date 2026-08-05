@@ -152,10 +152,11 @@ svg{display:block;}
 .fe-frame{width:100%;border:none;background:#fff;border-radius:12px;}
 
 .dz{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:18px;border-top:1px solid var(--border);}
-.hide-btn,.delete-btn,.cold-btn{font-size:13px;padding:9px 15px;border-radius:999px;cursor:pointer;font-weight:600;border:none;}
+.hide-btn,.delete-btn,.cold-btn,.reactivate-btn{font-size:13px;padding:9px 15px;border-radius:999px;cursor:pointer;font-weight:600;border:none;}
 .hide-btn{background:var(--surface-alt);color:var(--muted);}
 .delete-btn{background:var(--danger-tint);color:var(--danger-text);}
 .cold-btn{background:var(--warning-tint);color:var(--warning-text);}
+.reactivate-btn{background:var(--sage-tint);color:var(--sage-text);}
 .confirm-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .confirm-input{font-size:13px;padding:8px 11px;border:1px solid var(--border);border-radius:999px;width:110px;background:var(--surface-alt);}
 .confirm-go{font-size:13px;padding:9px 15px;border:none;border-radius:999px;background:var(--danger);color:#fff;cursor:pointer;font-weight:600;}
@@ -279,11 +280,11 @@ svg{display:block;}
   </div>
 </div>
 
-<!-- Cold lead confirm modal -->
+<!-- Cold lead / reactivate confirm modal (shared by both directions) -->
 <div class="modal-bg" id="cold-modal">
   <div class="modal">
-    <div class="modal-title">Mark as cold lead?</div>
-    <div class="modal-row" style="font-size:15px;color:var(--muted)">
+    <div class="modal-title" id="cold-modal-title">Mark as cold lead?</div>
+    <div class="modal-row" style="font-size:15px;color:var(--muted)" id="cold-modal-desc">
       This removes the active-lead tag in Housecall Pro, adds a cold-lead tag, and moves
       <strong id="cold-modal-name" style="color:var(--ink)"></strong> to the Cold leads page.
       Nothing is deleted.
@@ -298,7 +299,7 @@ svg{display:block;}
     </div>
     <div class="modal-btns">
       <button class="modal-cancel" onclick="closeColdModal()">Cancel</button>
-      <button class="modal-danger" id="cold-confirm-btn" disabled onclick="confirmMarkCold()">Mark as cold lead</button>
+      <button class="modal-danger" id="cold-confirm-btn" disabled onclick="confirmColdModalAction()">Mark as cold lead</button>
     </div>
   </div>
 </div>
@@ -763,6 +764,7 @@ function renderLeadDetail() {
   } else {
     html += '<button class="hide-btn" onclick="hideLead(\''+l.id+'\')">Hide</button>';
     if (!isCold) html += '<button class="cold-btn" onclick="openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
+    else html += '<button class="reactivate-btn" onclick="openReactivateModal(\''+l.id+'\')">Move back to active</button>';
     html += '<button class="delete-btn" onclick="showDeleteConfirm(\''+l.id+'\')">Delete</button>';
   }
   html += '</div>';
@@ -865,15 +867,33 @@ function openEmailApp() {
   closeEmailModal();
 }
 
-// ── Cold lead conversion (double confirmation: PIN + typed name) ──────────
+// ── Cold lead conversion + reactivation (double confirmation: PIN + typed
+// name), shared modal driven by coldModalMode ('cold' or 'active') ────────
+var coldModalMode = 'cold';
 function openColdModal(leadId) {
   var l = leads.find(function(x){return x.id===leadId;}); if (!l) return;
+  coldModalMode = 'cold';
   coldModalLeadId = leadId;
+  document.getElementById('cold-modal-title').textContent = 'Mark as cold lead?';
+  document.getElementById('cold-modal-desc').innerHTML = 'This removes the active-lead tag in Housecall Pro, adds a cold-lead tag, and moves <strong id="cold-modal-name" style="color:var(--ink)"></strong> to the Cold leads page. Nothing is deleted.';
   document.getElementById('cold-modal-name').textContent = l.customer_name;
   document.getElementById('cold-pin-input').value = '';
   document.getElementById('cold-name-input').value = '';
   document.getElementById('cold-confirm-btn').disabled = true;
   document.getElementById('cold-confirm-btn').textContent = 'Mark as cold lead';
+  document.getElementById('cold-modal').classList.add('open');
+}
+function openReactivateModal(leadId) {
+  var l = leads.find(function(x){return x.id===leadId;}); if (!l) return;
+  coldModalMode = 'active';
+  coldModalLeadId = leadId;
+  document.getElementById('cold-modal-title').textContent = 'Move back to active leads?';
+  document.getElementById('cold-modal-desc').innerHTML = 'This removes the cold-lead tag in Housecall Pro, adds the active-lead tag back, and moves <strong id="cold-modal-name" style="color:var(--ink)"></strong> back to Active leads as a new lead.';
+  document.getElementById('cold-modal-name').textContent = l.customer_name;
+  document.getElementById('cold-pin-input').value = '';
+  document.getElementById('cold-name-input').value = '';
+  document.getElementById('cold-confirm-btn').disabled = true;
+  document.getElementById('cold-confirm-btn').textContent = 'Move back to active';
   document.getElementById('cold-modal').classList.add('open');
 }
 function closeColdModal(){ document.getElementById('cold-modal').classList.remove('open'); coldModalLeadId = null; }
@@ -883,21 +903,27 @@ function checkColdModalReady() {
   var nameOk = document.getElementById('cold-name-input').value.trim().toLowerCase() === (l.customer_name||'').trim().toLowerCase();
   document.getElementById('cold-confirm-btn').disabled = !(pinOk && nameOk);
 }
-async function confirmMarkCold() {
+async function confirmColdModalAction() {
   if (!coldModalLeadId) return;
   var leadId = coldModalLeadId;
-  document.getElementById('cold-confirm-btn').disabled = true;
-  document.getElementById('cold-confirm-btn').textContent = 'Working...';
+  var mode = coldModalMode;
+  var busyText = mode === 'active' ? 'Move back to active' : 'Mark as cold lead';
+  var btn = document.getElementById('cold-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Working...';
   try {
-    var data = await callLeadFn({ action: 'mark_cold', lead_id: leadId });
-    if (data.error) { showToast('Could not mark as cold: ' + data.error); document.getElementById('cold-confirm-btn').disabled = false; document.getElementById('cold-confirm-btn').textContent = 'Mark as cold lead'; return; }
+    var data = await callLeadFn({ action: mode === 'active' ? 'mark_active' : 'mark_cold', lead_id: leadId });
+    if (data.error) {
+      showToast((mode === 'active' ? 'Could not reactivate: ' : 'Could not mark as cold: ') + data.error);
+      btn.disabled = false; btn.textContent = busyText;
+      return;
+    }
     closeColdModal();
     closeLeadDetail();
-    showToast('Moved to Cold leads.');
+    showToast(mode === 'active' ? 'Moved back to Active leads.' : 'Moved to Cold leads.');
     await loadAll();
   } catch (e) {
-    showToast('Something went wrong marking this cold.'); console.error(e);
-    document.getElementById('cold-confirm-btn').disabled = false; document.getElementById('cold-confirm-btn').textContent = 'Mark as cold lead';
+    showToast('Something went wrong.'); console.error(e);
+    btn.disabled = false; btn.textContent = busyText;
   }
 }
 
