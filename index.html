@@ -158,7 +158,7 @@ svg{display:block;}
 .empty{padding:3.5rem 1rem;text-align:center;color:var(--muted);font-size:16px;background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);}
 
 /* ── Modals ── */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(44,38,32,0.45);backdrop-filter:blur(3px);z-index:200;align-items:center;justify-content:center;padding:1rem;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(44,38,32,0.45);backdrop-filter:blur(3px);z-index:500;align-items:center;justify-content:center;padding:1rem;}
 .modal-bg.open{display:flex;}
 .modal{background:var(--surface);border-radius:24px;padding:1.85rem;width:420px;max-width:100%;box-shadow:var(--shadow-md);}
 .modal-title{font-size:19px;font-weight:700;margin-bottom:1rem;letter-spacing:-0.01em;}
@@ -837,6 +837,7 @@ function openColdModal(leadId) {
   document.getElementById('cold-pin-input').value = '';
   document.getElementById('cold-name-input').value = '';
   document.getElementById('cold-confirm-btn').disabled = true;
+  document.getElementById('cold-confirm-btn').textContent = 'Mark as cold lead';
   document.getElementById('cold-modal').classList.add('open');
 }
 function closeColdModal(){ document.getElementById('cold-modal').classList.remove('open'); coldModalLeadId = null; }
