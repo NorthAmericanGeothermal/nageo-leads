@@ -90,6 +90,9 @@ svg{display:block;}
 .badge-est{background:var(--success-tint);color:var(--success-text);}
 .badge-cold{background:var(--surface-alt);color:var(--muted);}
 .badge-hold{background:var(--warning-tint);color:var(--warning-text);}
+.badge-jobtype-new_construction{background:var(--sage-tint);color:var(--sage-text);}
+.badge-jobtype-retrofit{background:var(--accent-tint);color:var(--accent-text);}
+.badge-jobtype-replacement{background:var(--warning-tint);color:var(--warning-text);}
 .call-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;height:48px;background:var(--accent);color:#fff;border-radius:var(--radius-md);font-size:15px;font-weight:600;text-decoration:none;border:none;cursor:pointer;box-shadow:var(--shadow-sm);transition:background .15s;}
 .call-btn svg{width:17px;height:17px;}
 .call-btn:hover{background:var(--accent-dark);}
@@ -653,6 +656,7 @@ function renderLeadTile(l) {
   if (isCold) html += '<span class="badge badge-cold">Cold</span>';
   else if (isOnHold) html += '<span class="badge badge-hold">On hold</span>';
   else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
+  if (l.job_type) html += '<span class="badge badge-jobtype-'+esc(l.job_type)+'">'+esc(prettyJobType(l.job_type))+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Reply needed</span>';
   html += '</div></div>';
 
@@ -724,6 +728,12 @@ function renderLeadDetail() {
     if (l.customer_tag_id) html += '<div class="info-line"><b>Customer ID:</b> '+esc(l.customer_tag_id)+'</div>';
     html += '</div>';
   }
+
+  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Job type</div><div class="status-chips">';
+  ['new_construction','retrofit','replacement'].forEach(function(jt){
+    html += '<button class="schip'+(l.job_type===jt?' active':'')+'" onclick="setJobType(\''+l.id+'\',\''+jt+'\')">'+prettyJobType(jt)+'</button>';
+  });
+  html += '</div></div>';
 
   if (!isCold && !isOnHold) {
     html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Status</div><div class="status-chips">';
@@ -829,6 +839,7 @@ function renderLeadDetail() {
   el.innerHTML = html;
 }
 function prettyStatus(s){ return { new:'New', contacted:'Contacted', quoted:'Quoted', won:'Won', lost:'Lost', cold:'Cold', on_hold:'On hold' }[s] || s; }
+function prettyJobType(s){ return { new_construction:'New Construction', retrofit:'Retrofit', replacement:'Replacement' }[s] || s; }
 function prettyApproval(s){ return { pro_approved:'Pro approved', customer_approved:'Customer approved', declined:'Declined', pending:'Pending' }[s] || s; }
 async function refreshEstimates(leadId) {
   var l = leads.find(function(x){return x.id===leadId;}); if (!l || !l.hcp_customer_id) return;
@@ -874,6 +885,15 @@ async function setStatus(leadId, status) {
   var l = leads.find(function(x){return x.id===leadId;}); if (l) l.status = status;
   await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: 'Status changed to ' + status });
   renderLeadDetail(); renderPage(); showToast('Status updated.');
+}
+// Job type is purely local categorization — no HCP tag/sync involved.
+async function setJobType(leadId, jobType) {
+  var l = leads.find(function(x){return x.id===leadId;}); if (!l) return;
+  var newType = l.job_type === jobType ? null : jobType; // click again to clear
+  await sb.from('leads').update({ job_type: newType, updated_at: new Date().toISOString() }).eq('id', leadId);
+  l.job_type = newType;
+  await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: newType ? 'Job type set to ' + prettyJobType(newType) : 'Job type cleared' });
+  renderLeadDetail(); renderPage(); showToast(newType ? 'Job type set.' : 'Job type cleared.');
 }
 async function addNote(leadId) {
   var ta = document.getElementById('note-input-'+leadId);
