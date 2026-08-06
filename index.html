@@ -292,6 +292,14 @@ svg{display:block;}
       <div id="gmail-list"></div>
       <button class="btn btn-sm" style="margin-top:8px" onclick="connectGmail()">+ Connect Gmail</button>
     </div>
+    <div class="modal-row">
+      <div class="modal-label">Data repair</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
+        Fixes email threads that show the wrong "last email" date (a one-time bug where an older
+        email could overwrite a newer one's timestamp). Safe to run any time.
+      </div>
+      <button class="btn btn-sm" id="btn-repair-dates" onclick="repairThreadDates()">Fix email thread dates</button>
+    </div>
     <div class="modal-btns">
       <button class="modal-cancel" onclick="closeSettings()">Close</button>
       <button class="modal-danger" style="background:var(--accent)" onclick="saveSettings()">Save</button>
@@ -628,6 +636,25 @@ async function syncLeadEmails() {
   if (stoppedReason) msg += ' ' + stoppedReason;
   showToast(msg);
   await loadAll();
+}
+
+// ── One-time data repair for the last_message_at overwrite bug ─────────────
+async function repairThreadDates() {
+  var btn = document.getElementById('btn-repair-dates');
+  var origText = btn.textContent;
+  btn.textContent = 'Fixing…';
+  btn.disabled = true;
+  try {
+    var data = await callLeadFn({ action: 'repair_thread_dates' }, 60000);
+    if (data.error) { showToast('Repair failed: ' + data.error); return; }
+    showToast('Fixed ' + (data.threads_repaired||0) + ' of ' + (data.threads_seen||0) + ' email thread(s).');
+    await loadAll();
+  } catch (e) {
+    showToast('Repair failed.'); console.error(e);
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
 }
 
 // ── Gmail connect / disconnect ──────────────────────────────────────────────
