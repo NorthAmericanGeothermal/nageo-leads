@@ -189,6 +189,12 @@ svg{display:block;}
 .gmail-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
 .gmail-dot.ok{background:var(--success);}.gmail-dot.err{background:var(--danger);}.gmail-dot.discon{background:#C9C1B2;}
 
+.sync-progress-bar{width:100%;height:8px;background:var(--surface-alt);border-radius:999px;overflow:hidden;position:relative;margin-top:4px;}
+.sync-progress-fill{position:absolute;top:0;left:-40%;height:100%;width:40%;background:var(--accent);border-radius:999px;animation:sync-indeterminate 1.3s ease-in-out infinite;}
+@keyframes sync-indeterminate{0%{left:-40%;width:40%;}50%{left:30%;width:50%;}100%{left:100%;width:40%;}}
+.sync-progress-text{font-size:14px;color:var(--muted);margin-top:14px;line-height:1.5;}
+.sync-progress-stats{font-size:13px;color:var(--muted);margin-top:6px;}
+
 .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--ink);color:#FAF6F0;padding:15px 24px;border-radius:999px;font-size:15px;font-weight:500;z-index:300;opacity:0;transition:opacity 0.3s;pointer-events:none;max-width:90vw;text-align:center;box-shadow:var(--shadow-md);}
 .toast.show{opacity:1;}
 
@@ -325,6 +331,19 @@ svg{display:block;}
       <button class="btn btn-accent" style="width:100%;height:50px" onclick="copyEmailAddress()">Copy email address</button>
       <button class="btn" style="width:100%;height:50px" onclick="openEmailApp()">Open in email app</button>
       <button class="modal-cancel" style="width:100%" onclick="closeEmailModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Email sync progress modal -->
+<div class="modal-bg" id="sync-progress-modal">
+  <div class="modal" style="width:400px">
+    <div class="modal-title">Searching Gmail&hellip;</div>
+    <div class="sync-progress-bar"><div class="sync-progress-fill"></div></div>
+    <div class="sync-progress-text" id="sync-progress-text">Starting&hellip;</div>
+    <div class="sync-progress-stats" id="sync-progress-stats"></div>
+    <div class="modal-btns">
+      <button class="modal-cancel" id="sync-progress-stop-btn" onclick="cancelEmailSync()">Stop after this pass</button>
     </div>
   </div>
 </div>
@@ -550,16 +569,65 @@ async function syncHCP() {
     await loadAll();
   } catch (e) { showToast('Sync failed.'); console.error(e); }
 }
+var emailSyncCancelled = false;
+var emailSyncRunning = false;
+
+function cancelEmailSync() {
+  emailSyncCancelled = true;
+  var btn = document.getElementById('sync-progress-stop-btn');
+  if (btn) { btn.textContent = 'Stopping…'; btn.disabled = true; }
+}
+
 async function syncLeadEmails() {
-  showToast('Searching Gmail for each lead’s email history… this can take a bit.');
+  if (emailSyncRunning) return; // already in progress, ignore repeat clicks
+  emailSyncRunning = true;
+  emailSyncCancelled = false;
+
+  var textEl = document.getElementById('sync-progress-text');
+  var statsEl = document.getElementById('sync-progress-stats');
+  var stopBtn = document.getElementById('sync-progress-stop-btn');
+  stopBtn.textContent = 'Stop after this pass';
+  stopBtn.disabled = false;
+  textEl.textContent = 'Starting…';
+  statsEl.textContent = '';
+  document.getElementById('sync-progress-modal').classList.add('open');
+
+  var totalFound = 0, totalStored = 0, leadsChecked = 0, pass = 0;
+  var MAX_PASSES = 25; // safety valve so a stuck backend can't loop forever
+  var stoppedReason = null;
+
   try {
-    var data = await callLeadFn({ action: 'sync_lead_emails' }, 60000);
-    if (data.error) { showToast('Email sync failed: ' + data.error); return; }
-    var msg = 'Found ' + (data.messages_found||0) + ', stored ' + (data.messages_stored||0) + ' new email(s) across ' + (data.leads_checked||0) + ' lead(s).';
-    if (data.capped_out) msg += ' Hit this run’s cap — click Sync emails again to keep going.';
-    showToast(msg);
-    await loadAll();
-  } catch (e) { showToast('Email sync failed.'); console.error(e); }
+    while (pass < MAX_PASSES) {
+      pass++;
+      textEl.textContent = 'Pass ' + pass + ': searching every lead’s full Gmail history (this can take a couple minutes per pass)…';
+      var data;
+      try {
+        data = await callLeadFn({ action: 'sync_lead_emails' }, 140000);
+      } catch (e) {
+        stoppedReason = 'Sync failed: ' + e.message;
+        console.error(e);
+        break;
+      }
+      if (data.error) { stoppedReason = 'Sync failed: ' + data.error; break; }
+
+      totalFound += (data.messages_found || 0);
+      totalStored += (data.messages_stored || 0);
+      leadsChecked = data.leads_checked || leadsChecked;
+      statsEl.textContent = 'Found ' + totalFound + ', stored ' + totalStored + ' new email(s) — ' + leadsChecked + ' lead(s) checked so far.';
+
+      if (emailSyncCancelled) { stoppedReason = 'Stopped early at your request.'; break; }
+      if (!data.capped_out) { stoppedReason = null; break; } // full pass finished, nothing left to search
+    }
+    if (pass >= MAX_PASSES && !stoppedReason) stoppedReason = 'Stopped after ' + MAX_PASSES + ' passes as a safety limit.';
+  } finally {
+    document.getElementById('sync-progress-modal').classList.remove('open');
+    emailSyncRunning = false;
+  }
+
+  var msg = 'Found ' + totalFound + ', stored ' + totalStored + ' new email(s) across ' + leadsChecked + ' lead(s), over ' + pass + ' pass(es).';
+  if (stoppedReason) msg += ' ' + stoppedReason;
+  showToast(msg);
+  await loadAll();
 }
 
 // ── Gmail connect / disconnect ──────────────────────────────────────────────
