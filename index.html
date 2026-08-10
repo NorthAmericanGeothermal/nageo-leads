@@ -869,7 +869,9 @@ function renderLeadTile(l, i) {
   if (isCold) html += '<span class="badge badge-cold">Cold</span>';
   else if (isOnHold) html += '<span class="badge badge-hold">On hold</span>';
   else if (isWon) html += '<span class="badge badge-won">Won</span>';
-  else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
+  // No plain "New/Contacted/Quoted" badge for active leads anymore — the
+  // Pipeline stage (shown on the Status card) replaced it as the thing that
+  // actually reflects where a lead stands, once it's on the board.
   if (l.job_type) html += '<span class="badge badge-jobtype-'+esc(l.job_type)+'">'+esc(prettyJobType(l.job_type))+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Reply needed</span>';
   html += '</div></div>';
@@ -936,7 +938,8 @@ function renderLeadDetail() {
   if (isCold) html += '<span class="badge badge-cold">Cold lead</span>';
   else if (isOnHold) html += '<span class="badge badge-hold">On hold</span>';
   else if (isWon) html += '<span class="badge badge-won">Won</span>';
-  else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
+  // No plain "New/Contacted/Quoted" badge here anymore — see the Status
+  // card below, which shows the Pipeline stage instead now.
   if (estimates.length) html += '<span class="badge badge-est">'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Needs a reply</span>';
   // Pipeline stage now shows in the collapsible Status card below instead
@@ -971,17 +974,19 @@ function renderLeadDetail() {
   if (!isCold && !isOnHold) {
     // Collapsed by default, showing the current Pipeline stage as the
     // summary — that's what actually changes when a tile gets moved on the
-    // Pipeline board, so it's what belongs here front-and-center. Expand to
-    // still hand-set the older new/contacted/quoted/won/lost status if needed.
+    // Pipeline board, so it's what belongs here front-and-center. The old
+    // New/Contacted/Quoted/Won/Lost chips are gone — once a lead is on the
+    // Pipeline board, that coarser status doesn't fully apply anymore, so
+    // this is now just a read-only summary pointing at the Pipeline tab.
     var statusCollapsed = sectionCollapsed(l.id, 'status');
     html += '<div class="ld-card">';
     html += sectionHeader(l.id, 'status', 'Status', esc(prettyPipelineStage(l.pipeline_stage)));
     if (!statusCollapsed) {
-      html += '<div class="section-body"><div class="status-chips">';
-      ['new','contacted','quoted','won','lost'].forEach(function(s){
-        html += '<button class="schip'+(l.status===s?' active':'')+'" onclick="setStatus(\''+l.id+'\',\''+s+'\')">'+prettyStatus(s)+'</button>';
-      });
-      html += '</div></div>';
+      html += '<div class="section-body" style="font-size:14px;color:var(--muted)">';
+      html += 'Currently in <b style="color:var(--ink)">'+esc(prettyPipelineStage(l.pipeline_stage))+'</b> on the Pipeline board';
+      if (l.pipeline_stage_updated_at) html += ' &mdash; moved here '+timeAgo(l.pipeline_stage_updated_at);
+      html += '. Drag or use the dropdown on its card in the <b style="color:var(--ink)">Pipeline</b> tab to change it.';
+      html += '</div>';
     }
     html += '</div>';
   }
