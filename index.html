@@ -698,8 +698,10 @@ function setPage(p){
 function render(){ updateStats(); renderPage(); }
 function updateStats() {
   var active = leads.filter(function(l){return l.status!=='cold' && l.status!=='on_hold';});
-  var reply = 0;
-  active.forEach(function(l){ (threadsByLead[l.id]||[]).forEach(function(t){ if (t.needs_reply) reply++; }); });
+  // Count LEADS that need a reply, not the raw number of unanswered threads —
+  // a single active lead with 3 unanswered threads should still only count
+  // once here, so this stays sensible next to the "Active leads" total.
+  var reply = active.filter(function(l){ return leadReplyCount(l.id) > 0; }).length;
   document.getElementById('s-reply').textContent = reply;
   document.getElementById('s-new').textContent = active.length;
   document.getElementById('s-quotes').textContent = active.filter(function(l){return (l.estimates||[]).length>0;}).length;
