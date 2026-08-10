@@ -97,6 +97,7 @@ svg{display:block;}
 .badge-jobtype-new_construction{background:var(--sage-tint);color:var(--sage-text);}
 .badge-jobtype-retrofit{background:var(--accent-tint);color:var(--accent-text);}
 .badge-jobtype-replacement{background:var(--warning-tint);color:var(--warning-text);}
+.badge-add{background:transparent;color:var(--muted);border:1px dashed var(--border);}
 .call-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;height:48px;background:var(--accent);color:#fff;border-radius:var(--radius-md);font-size:15px;font-weight:600;text-decoration:none;border:none;cursor:pointer;box-shadow:var(--shadow-sm);transition:background .15s;}
 .call-btn svg{width:17px;height:17px;}
 .call-btn:hover{background:var(--accent-dark);}
@@ -340,15 +341,27 @@ svg{display:block;}
   </div>
 </div>
 
-<!-- Email choice modal -->
-<div class="modal-bg" id="email-modal">
+<!-- Job type modal — pick a type if none set, or confirm removing one -->
+<div class="modal-bg" id="jobtype-modal">
   <div class="modal" style="width:360px">
-    <div class="modal-title">Email <span id="email-modal-address" style="font-weight:400;color:var(--muted);font-size:16px;display:block;margin-top:4px;word-break:break-all;"></span></div>
-    <div id="email-modal-list" style="display:flex;flex-direction:column;gap:6px;margin-top:0.75rem;"></div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:1.25rem;">
-      <button class="btn btn-accent" style="width:100%;height:50px" onclick="copyEmailAddress()">Copy email address</button>
-      <button class="btn" style="width:100%;height:50px" onclick="openEmailApp()">Open in email app</button>
-      <button class="modal-cancel" style="width:100%" onclick="closeEmailModal()">Cancel</button>
+    <div class="modal-title" id="jobtype-modal-title">Job type</div>
+    <div class="modal-row" id="jobtype-modal-body"></div>
+    <div class="modal-btns" id="jobtype-modal-btns"></div>
+  </div>
+</div>
+
+<!-- Email modal: every address on file, copy/open per row, add another -->
+<div class="modal-bg" id="email-modal">
+  <div class="modal" style="width:400px">
+    <div class="modal-title">Emails on file</div>
+    <div id="email-modal-list" style="display:flex;flex-direction:column;gap:8px;margin:1.1rem 0;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:0.5rem;">
+      <input type="email" class="modal-input" id="email-modal-add-input" placeholder="Add another email address" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addLeadEmailFromModal();}">
+      <button class="btn btn-sm" onclick="addLeadEmailFromModal()">Add</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">Manually added emails are searched during email sync too.</div>
+    <div class="modal-btns">
+      <button class="modal-cancel" style="width:100%" onclick="closeEmailModal()">Close</button>
     </div>
   </div>
 </div>
@@ -874,6 +887,10 @@ function renderLeadDetail() {
   else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
   if (estimates.length) html += '<span class="badge badge-est">'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Needs a reply</span>';
+  // Job type lives as a tag here instead of its own card — click it to
+  // change/remove it, or click the "+ Job type" placeholder to set one.
+  if (l.job_type) html += '<span class="badge badge-jobtype-'+esc(l.job_type)+'" style="cursor:pointer" onclick="openJobTypeModal(\''+esc(l.id)+'\')" title="Click to remove">'+esc(prettyJobType(l.job_type))+'</span>';
+  else html += '<span class="badge badge-add" style="cursor:pointer" onclick="openJobTypeModal(\''+esc(l.id)+'\')" title="Set job type">+ Job type</span>';
   html += '</div></div>';
 
   var latestThread = null;
@@ -890,20 +907,44 @@ function renderLeadDetail() {
   if (leadHasEmail(l)) html += '<button class="icon-btn" onclick="openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
   html += '</div>';
 
+  // Email history moved up front — it's the thing you actually come to a
+  // lead's page to check most often, so it shouldn't be buried under
+  // address/job-type/status/estimates/notes.
+  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Email history</div>';
+  if (!threads.length) {
+    html += '<div style="font-size:14px;color:var(--muted)">No email threads linked yet.</div>';
+  } else {
+    threads.forEach(function(t){
+      var tOpen = openThreads.has(t.id);
+      var msgs = messagesByThread[t.id] || [];
+      var flagged = t.needs_reply && !isCold && !isOnHold;
+      html += '<div class="thread'+(flagged?' flag':'')+'">';
+      html += '<div class="thread-hd" onclick="toggleThread(\''+t.id+'\')">';
+      if (flagged) html += '<span class="dot"></span>';
+      html += '<span class="thread-subj">'+esc(t.subject||'(no subject)')+'</span>';
+      html += '<span class="thread-time">'+timeAgo(t.last_message_at)+'</span></div>';
+      html += '<div class="msgs'+(tOpen?' open':'')+'">';
+      if (!msgs.length) html += '<div style="padding:12px 14px;font-size:13px;color:var(--muted)">No messages loaded.</div>';
+      msgs.slice().reverse().forEach(function(m){
+        var eOpen = openEmails.has(m.id);
+        var isLast = msgs[msgs.length-1].id === m.id;
+        html += '<div class="msg-row" onclick="toggleEmail(\''+m.id+'\')">';
+        html += '<div class="msg-top"><span class="msg-who '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'Received':'Sent')+' &mdash; '+esc(m.direction==='inbound'?m.from_address:(m.to_addresses||[])[0]||'')+'</span><span class="msg-when">'+niceDate(m.sent_at)+'</span></div>';
+        html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(flagged && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
+        html += '</div>';
+        html += '<div class="full-email'+(eOpen?' open':'')+'" id="fe-'+m.id+'"></div>';
+      });
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+
   if (l.address || l.customer_tag_id) {
     html += '<div class="ld-card">';
     if (l.address) html += '<div class="info-line"><b>Address:</b> '+esc(l.address)+'</div>';
     if (l.customer_tag_id) html += '<div class="info-line"><b>Customer ID:</b> '+esc(l.customer_tag_id)+'</div>';
     html += '</div>';
   }
-
-  html += renderEmailsCard(l);
-
-  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Job type</div><div class="status-chips">';
-  ['new_construction','retrofit','replacement'].forEach(function(jt){
-    html += '<button class="schip'+(l.job_type===jt?' active':'')+'" onclick="setJobType(\''+l.id+'\',\''+jt+'\')">'+prettyJobType(jt)+'</button>';
-  });
-  html += '</div></div>';
 
   if (!isCold && !isOnHold) {
     html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Status</div><div class="status-chips">';
@@ -963,35 +1004,6 @@ function renderLeadDetail() {
   html += '<textarea class="note-textarea" id="note-input-'+l.id+'" placeholder="Add a note..."></textarea>';
   html += '<div class="note-hint">Saved here on the dashboard — not pushed to Housecall Pro.</div>';
   html += '<button class="note-btn" id="note-btn-'+l.id+'" onclick="addNote(\''+l.id+'\')">Add note</button>';
-  html += '</div>';
-
-  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Email history</div>';
-  if (!threads.length) {
-    html += '<div style="font-size:14px;color:var(--muted)">No email threads linked yet.</div>';
-  } else {
-    threads.forEach(function(t){
-      var tOpen = openThreads.has(t.id);
-      var msgs = messagesByThread[t.id] || [];
-      var flagged = t.needs_reply && !isCold && !isOnHold;
-      html += '<div class="thread'+(flagged?' flag':'')+'">';
-      html += '<div class="thread-hd" onclick="toggleThread(\''+t.id+'\')">';
-      if (flagged) html += '<span class="dot"></span>';
-      html += '<span class="thread-subj">'+esc(t.subject||'(no subject)')+'</span>';
-      html += '<span class="thread-time">'+timeAgo(t.last_message_at)+'</span></div>';
-      html += '<div class="msgs'+(tOpen?' open':'')+'">';
-      if (!msgs.length) html += '<div style="padding:12px 14px;font-size:13px;color:var(--muted)">No messages loaded.</div>';
-      msgs.slice().reverse().forEach(function(m){
-        var eOpen = openEmails.has(m.id);
-        var isLast = msgs[msgs.length-1].id === m.id;
-        html += '<div class="msg-row" onclick="toggleEmail(\''+m.id+'\')">';
-        html += '<div class="msg-top"><span class="msg-who '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'Received':'Sent')+' &mdash; '+esc(m.direction==='inbound'?m.from_address:(m.to_addresses||[])[0]||'')+'</span><span class="msg-when">'+niceDate(m.sent_at)+'</span></div>';
-        html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(flagged && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
-        html += '</div>';
-        html += '<div class="full-email'+(eOpen?' open':'')+'" id="fe-'+m.id+'"></div>';
-      });
-      html += '</div></div>';
-    });
-  }
   html += '</div>';
 
   html += '<div class="ld-card dz" style="margin-top:20px;border-top:none;padding-top:20px">';
@@ -1074,6 +1086,47 @@ async function setJobType(leadId, jobType) {
   await sb.from('lead_activity_log').insert({ lead_id: leadId, user_name: currentUser.name, action: newType ? 'Job type set to ' + prettyJobType(newType) : 'Job type cleared' });
   renderLeadDetail(); renderPage(); showToast(newType ? 'Job type set.' : 'Job type cleared.');
 }
+// Job type now lives as a single tag on the lead's header instead of a full
+// card of chips — this small modal handles both directions: pick a type if
+// there isn't one yet, or confirm clearing the one that's there.
+var jobTypeModalLeadId = null;
+function openJobTypeModal(leadId) {
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  jobTypeModalLeadId = leadId;
+  var body = document.getElementById('jobtype-modal-body');
+  var btns = document.getElementById('jobtype-modal-btns');
+  if (l.job_type) {
+    document.getElementById('jobtype-modal-title').textContent = 'Remove job type tag?';
+    body.innerHTML = '<div style="font-size:15px;color:var(--muted)">This clears the <b style="color:var(--ink)">'+esc(prettyJobType(l.job_type))+'</b> tag from '+esc(l.customer_name||'this lead')+'&rsquo;s profile.</div>';
+    btns.innerHTML = '<button class="modal-cancel" onclick="closeJobTypeModal()">Cancel</button><button class="modal-danger" onclick="removeJobTypeFromModal()">Remove tag</button>';
+  } else {
+    document.getElementById('jobtype-modal-title').textContent = 'Set job type';
+    var chips = '<div class="status-chips">';
+    ['new_construction','retrofit','replacement'].forEach(function(jt){
+      chips += '<button class="schip" onclick="setJobTypeFromModal(\''+jt+'\')">'+prettyJobType(jt)+'</button>';
+    });
+    chips += '</div>';
+    body.innerHTML = chips;
+    btns.innerHTML = '<button class="modal-cancel" onclick="closeJobTypeModal()">Cancel</button>';
+  }
+  document.getElementById('jobtype-modal').classList.add('open');
+}
+function closeJobTypeModal() {
+  document.getElementById('jobtype-modal').classList.remove('open');
+  jobTypeModalLeadId = null;
+}
+function setJobTypeFromModal(jt) {
+  if (!jobTypeModalLeadId) return;
+  setJobType(jobTypeModalLeadId, jt);
+  closeJobTypeModal();
+}
+function removeJobTypeFromModal() {
+  if (!jobTypeModalLeadId) return;
+  var l = leads.find(function(x){return x.id===jobTypeModalLeadId;});
+  if (l && l.job_type) setJobType(jobTypeModalLeadId, l.job_type); // setJobType toggles off when passed the current type
+  closeJobTypeModal();
+}
 // Local-only — writes straight to lead_activity_log, no edge function call
 // and nothing pushed to Housecall Pro (see lead-hcp-sync.ts header for why).
 async function addNote(leadId) {
@@ -1139,71 +1192,42 @@ function leadEmailEntries(l) {
 }
 function leadHasEmail(l) { return leadEmailEntries(l).length > 0; }
 
-// ── Email choice (copy vs. open default mail app) ──────────────────────────
-// Leads can have more than one email on file (a spouse, property manager,
-// etc.) — this used to only ever look at primary_email, silently ignoring
-// any others. Now it opens with every known address for the lead (HCP +
-// manually added), defaulting to the first one, and lets you switch which
-// one you're copying/emailing if there's more than one.
-var emailModalAddress = '';
-var emailModalAddresses = [];
+// ── Email modal: every address on file, manage + copy from one place ──────
+// Housecall Pro's API sometimes only exposes one email per customer, so this
+// also doubles as the place to add a real second address by hand. Manually
+// added emails are stored separately (leads.manual_emails) from the
+// HCP-sourced ones so a resync from HCP never wipes them out, and they're
+// searched during email sync right alongside the HCP addresses.
+var emailModalLeadId = null;
 function openEmailChoice(leadId) {
   var l = leads.find(function(x){return x.id===leadId;});
   if (!l) return;
-  var addrs = leadEmailEntries(l).map(function(e){ return e.address; });
-  if (!addrs.length) return;
-  emailModalAddresses = addrs;
-  selectEmailAddress(addrs[0]);
+  emailModalLeadId = leadId;
+  renderEmailModalList();
+  document.getElementById('email-modal-add-input').value = '';
   document.getElementById('email-modal').classList.add('open');
 }
-function selectEmailAddress(addr) {
-  emailModalAddress = addr;
-  document.getElementById('email-modal-address').textContent = addr;
+function renderEmailModalList() {
+  var l = leads.find(function(x){return x.id===emailModalLeadId;});
   var list = document.getElementById('email-modal-list');
-  if (emailModalAddresses.length > 1) {
-    list.innerHTML = emailModalAddresses.map(function(a){
-      var active = a === emailModalAddress;
-      return '<button class="btn'+(active?' btn-accent':'')+'" style="width:100%;justify-content:flex-start;text-align:left;font-size:14px" onclick="selectEmailAddress(\''+esc(a).replace(/'/g,"\\'")+'\')">'+(active?'&#10003;&nbsp; ':'')+esc(a)+'</button>';
-    }).join('');
-  } else {
-    list.innerHTML = '';
-  }
-}
-function closeEmailModal(){ document.getElementById('email-modal').classList.remove('open'); }
-
-// ── Manage emails on file (lead detail page) ────────────────────────────────
-// Housecall Pro's API sometimes only exposes one email per customer, so this
-// lets a rep add a second real address directly here. Manually added emails
-// are stored separately (leads.manual_emails) from the HCP-sourced ones so a
-// resync from HCP never wipes them out, and they're searched during email
-// sync right alongside the HCP addresses.
-function renderEmailsCard(l) {
+  if (!l) { list.innerHTML = ''; return; }
   var entries = leadEmailEntries(l);
-  var html = '<div class="ld-card"><div class="section-label" style="margin-top:0">Emails on file</div>';
   if (!entries.length) {
-    html += '<div style="font-size:14px;color:var(--muted);margin-bottom:10px">No email addresses on file yet.</div>';
-  } else {
-    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
-    entries.forEach(function(e){
-      var addrEsc = esc(e.address).replace(/'/g,"\\'");
-      html += '<div style="display:flex;align-items:center;gap:8px">';
-      html += '<div style="flex:1;font-size:14px;word-break:break-all">'+esc(e.address)+(e.source==='manual'?' <span style="color:var(--muted);font-size:12px">&middot; added manually</span>':'')+'</div>';
-      html += '<button class="btn btn-sm" onclick="copyAddressDirect(\''+addrEsc+'\')">Copy</button>';
-      if (e.source === 'manual') {
-        html += '<button class="btn btn-sm" onclick="removeLeadEmail(\''+esc(l.id)+'\',\''+addrEsc+'\')" title="Remove">&times;</button>';
-      }
-      html += '</div>';
-    });
-    html += '</div>';
+    list.innerHTML = '<div style="font-size:14px;color:var(--muted)">No email addresses on file yet.</div>';
+    return;
   }
-  html += '<div style="display:flex;gap:8px">';
-  html += '<input type="email" class="modal-input" id="ld-add-email-input" placeholder="Add another email address" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addLeadEmail(\''+esc(l.id)+'\');}">';
-  html += '<button class="btn btn-sm" onclick="addLeadEmail(\''+esc(l.id)+'\')">Add</button>';
-  html += '</div>';
-  html += '<div style="font-size:12px;color:var(--muted);margin-top:6px">Manually added emails are searched during email sync too.</div>';
-  html += '</div>';
-  return html;
+  list.innerHTML = entries.map(function(e){
+    var addrEsc = esc(e.address).replace(/'/g,"\\'");
+    var row = '<div style="display:flex;align-items:center;gap:8px">';
+    row += '<div style="flex:1;font-size:14px;word-break:break-all">'+esc(e.address)+(e.source==='manual'?' <span style="color:var(--muted);font-size:12px">&middot; added manually</span>':'')+'</div>';
+    row += '<button class="btn btn-sm" onclick="copyAddressDirect(\''+addrEsc+'\')">Copy</button>';
+    row += '<a class="btn btn-sm" href="mailto:'+encodeURIComponent(e.address)+'" style="text-decoration:none">Open</a>';
+    if (e.source === 'manual') row += '<button class="btn btn-sm" onclick="removeLeadEmail(\''+addrEsc+'\')" title="Remove">&times;</button>';
+    row += '</div>';
+    return row;
+  }).join('');
 }
+function closeEmailModal(){ document.getElementById('email-modal').classList.remove('open'); emailModalLeadId = null; }
 function copyAddressDirect(addr) {
   var done = function(){ showToast('Copied ' + addr); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1215,10 +1239,11 @@ function copyAddressDirect(addr) {
     done();
   }
 }
-async function addLeadEmail(leadId) {
-  var input = document.getElementById('ld-add-email-input');
+async function addLeadEmailFromModal() {
+  var leadId = emailModalLeadId;
+  var input = document.getElementById('email-modal-add-input');
   var val = (input.value||'').trim().toLowerCase();
-  if (!val) return;
+  if (!val || !leadId) return;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) { showToast("That doesn't look like a valid email address."); return; }
   var l = leads.find(function(x){return x.id===leadId;});
   if (!l) return;
@@ -1230,9 +1255,11 @@ async function addLeadEmail(leadId) {
   l.manual_emails = manual;
   input.value = '';
   showToast('Email added.');
+  renderEmailModalList();
   renderLeadDetail();
 }
-async function removeLeadEmail(leadId, email) {
+async function removeLeadEmail(email) {
+  var leadId = emailModalLeadId;
   var l = leads.find(function(x){return x.id===leadId;});
   if (!l) return;
   var manual = (l.manual_emails||[]).filter(function(e){ return e.toLowerCase() !== email.toLowerCase(); });
@@ -1240,23 +1267,8 @@ async function removeLeadEmail(leadId, email) {
   if (r.error) { showToast('Could not remove that email — try again.'); return; }
   l.manual_emails = manual;
   showToast('Email removed.');
+  renderEmailModalList();
   renderLeadDetail();
-}
-function copyEmailAddress() {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(emailModalAddress).then(function(){
-      showToast('Copied ' + emailModalAddress); closeEmailModal();
-    }).catch(function(){ showToast('Could not copy — try again.'); });
-  } else {
-    var tmp = document.createElement('input');
-    tmp.value = emailModalAddress; document.body.appendChild(tmp);
-    tmp.select(); document.execCommand('copy'); document.body.removeChild(tmp);
-    showToast('Copied ' + emailModalAddress); closeEmailModal();
-  }
-}
-function openEmailApp() {
-  window.location.href = 'mailto:' + emailModalAddress;
-  closeEmailModal();
 }
 
 // ── Cold lead conversion + reactivation (double confirmation: PIN + typed
