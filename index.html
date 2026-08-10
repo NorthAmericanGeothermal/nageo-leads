@@ -1445,6 +1445,15 @@ function renderPresSlide() {
 
   var html = '<div class="pres-name">'+esc(l.customer_name||'Unknown')+'</div>';
   html += '<div class="pres-overview'+(l.ai_overview?'':' loading')+'">'+(l.ai_overview ? esc(l.ai_overview) : 'Preparing summary...')+'</div>';
+  // The "Update AI overviews" bulk action only refreshes summaries it thinks
+  // are stale (based on new email activity since the summary was cached),
+  // so it can miss a summary that's just plain wrong for some other reason
+  // (bad number, outdated by an estimate change, etc.) — this button forces
+  // a regeneration of THIS lead's summary specifically, no staleness check.
+  html += '<div style="display:flex;align-items:center;gap:10px;margin:-14px 0 24px;font-size:13px;color:var(--muted)">';
+  if (l.ai_overview_generated_at) html += '<span>Updated '+timeAgo(l.ai_overview_generated_at)+'</span>';
+  html += '<button class="btn btn-sm" id="pres-regen-btn" onclick="forceRegenerateOverview(\''+esc(l.id)+'\')">Regenerate summary</button>';
+  html += '</div>';
   if (latest && latestMsg) {
     html += '<div class="pres-email-label">Latest email</div>';
     html += '<div class="pres-email'+(latest.needs_reply?' flag':'')+'">';
@@ -1455,6 +1464,26 @@ function renderPresSlide() {
     html += '<div class="pres-email-label">Latest email</div><div style="color:var(--muted)">No email history yet.</div>';
   }
   document.getElementById('pres-card').innerHTML = html;
+}
+async function forceRegenerateOverview(leadId) {
+  var btn = document.getElementById('pres-regen-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Regenerating…'; }
+  try {
+    var res = await callLeadFn({ action: 'generate_overview', lead_id: leadId });
+    if (res && res.overview) {
+      var genAt = new Date().toISOString();
+      var master = leads.find(function(x){return x.id===leadId;});
+      if (master) { master.ai_overview = res.overview; master.ai_overview_generated_at = genAt; }
+      var current = presLeads.find(function(x){return x.id===leadId;});
+      if (current) { current.ai_overview = res.overview; current.ai_overview_generated_at = genAt; }
+      showToast('Summary updated.');
+    } else {
+      showToast('Could not regenerate that summary — try again.');
+    }
+  } catch (e) {
+    showToast('Could not regenerate that summary — try again.');
+  }
+  if (document.getElementById('presentation').classList.contains('open')) renderPresSlide();
 }
 function presStep(dir) {
   var next = presIndex + dir;
