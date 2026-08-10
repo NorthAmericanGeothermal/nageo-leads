@@ -69,13 +69,19 @@ svg{display:block;}
 .search-row input{width:100%;padding:15px 16px 15px 48px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:16px;background:var(--surface);transition:box-shadow .15s,border-color .15s;}
 .search-row input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint);}
 
-/* ── Lead tiles (grid) ── */
-.leads{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start;margin-bottom:8px;}
+/* ── Lead tiles (masonry-style columns) ──
+   Switched from CSS grid to CSS multi-column: grid row-locks height across
+   both columns to whichever card in that row is tallest, which is exactly
+   what produced the odd dead space under shorter cards next to a
+   long-wrapping name. Multi-column lets each column fill independently,
+   like a proper masonry layout, so a short card is immediately followed by
+   the next card instead of leaving a gap. */
+.leads{column-count:2;column-gap:16px;margin-bottom:8px;}
 .section-heading{font-size:15px;font-weight:700;color:var(--ink);margin:0 0 12px;display:flex;align-items:center;gap:8px;}
 .section-heading:not(:first-child){margin-top:32px;}
 .section-count{font-size:12px;font-weight:600;color:var(--muted);background:var(--surface-alt);padding:3px 10px;border-radius:999px;}
 @keyframes tileIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
-.tile{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:20px 22px;cursor:pointer;transition:box-shadow .15s,transform .1s;animation:tileIn .45s cubic-bezier(.16,1,.3,1) backwards;animation-delay:calc(var(--i, 0) * 35ms);}
+.tile{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:20px 22px;cursor:pointer;transition:box-shadow .15s,transform .1s;animation:tileIn .45s cubic-bezier(.16,1,.3,1) backwards;animation-delay:calc(var(--i, 0) * 35ms);break-inside:avoid;margin-bottom:16px;}
 .tile:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
 .tile.flag{box-shadow:var(--shadow-sm),inset 4px 0 0 var(--danger);}
 .tile:hover.flag{box-shadow:var(--shadow-md),inset 4px 0 0 var(--danger);}
@@ -107,7 +113,8 @@ svg{display:block;}
 .pipeline-card-footer{font-size:11.5px;color:var(--muted);}
 .pipeline-card-footer b{color:var(--ink);font-weight:600;}
 .pipeline-card-flag{font-size:12px;color:var(--danger-text);font-weight:600;margin-bottom:6px;}
-.tile-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;}
+.tile-top{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.tile-top .badges{justify-content:flex-start;}
 .tile-name{font-size:19px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;}
 .tile-info{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;min-height:20px;}
 .tile-row{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);}
@@ -262,6 +269,10 @@ svg{display:block;}
   .stats{grid-template-columns:1fr 1fr;}
   .pres-name{font-size:28px;}
   .pres-overview{font-size:17px;}
+  .leads{column-count:1;}
+}
+@media(min-width:641px) and (max-width:900px){
+  .leads{column-count:1;}
 }
 </style>
 </head>
@@ -305,7 +316,10 @@ svg{display:block;}
       <button class="tab" id="tab-won" onclick="setPage('won')">Won</button>
     </div>
 
-    <div class="search-row" id="search-row-icon"><input type="text" id="search-input" placeholder="Search by name or phone" oninput="renderPage()"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.25rem">
+      <div class="search-row" id="search-row-icon" style="margin-bottom:0;flex:1"><input type="text" id="search-input" placeholder="Search by name or phone" oninput="renderPage()"></div>
+      <button class="btn btn-sm" id="btn-sync-emails-cold" style="display:none;white-space:nowrap" onclick="syncLeadEmails('cold')">Sync emails (cold leads)</button>
+    </div>
     <div id="leads-list"></div>
   </div>
 </div>
@@ -406,7 +420,7 @@ svg{display:block;}
 <!-- Email sync progress modal -->
 <div class="modal-bg" id="sync-progress-modal">
   <div class="modal" style="width:400px">
-    <div class="modal-title">Searching Gmail&hellip;</div>
+    <div class="modal-title" id="sync-progress-title">Searching Gmail&hellip;</div>
     <div class="sync-progress-bar"><div class="sync-progress-fill"></div></div>
     <div class="sync-progress-text" id="sync-progress-text">Starting&hellip;</div>
     <div class="sync-progress-stats" id="sync-progress-stats"></div>
@@ -658,7 +672,7 @@ function cancelEmailSync() {
   if (btn) { btn.textContent = 'Stopping…'; btn.disabled = true; }
 }
 
-async function syncLeadEmails() {
+async function syncLeadEmails(scope) {
   if (emailSyncRunning) return; // already in progress, ignore repeat clicks
   emailSyncRunning = true;
   emailSyncCancelled = false;
@@ -666,6 +680,8 @@ async function syncLeadEmails() {
   var textEl = document.getElementById('sync-progress-text');
   var statsEl = document.getElementById('sync-progress-stats');
   var stopBtn = document.getElementById('sync-progress-stop-btn');
+  var titleEl = document.getElementById('sync-progress-title');
+  titleEl.textContent = scope === 'cold' ? 'Searching Gmail for cold leads…' : 'Searching Gmail…';
   stopBtn.textContent = 'Stop after this pass';
   stopBtn.disabled = false;
   textEl.textContent = 'Starting…';
@@ -679,10 +695,10 @@ async function syncLeadEmails() {
   try {
     while (pass < MAX_PASSES) {
       pass++;
-      textEl.textContent = 'Pass ' + pass + ': searching every lead’s full Gmail history (this can take a couple minutes per pass)…';
+      textEl.textContent = 'Pass ' + pass + ': searching ' + (scope==='cold' ? 'cold leads’' : 'every lead’s') + ' full Gmail history (this can take a couple minutes per pass)…';
       var data;
       try {
-        data = await callLeadFn({ action: 'sync_lead_emails' }, 140000);
+        data = await callLeadFn({ action: 'sync_lead_emails', scope: scope }, 140000);
       } catch (e) {
         stoppedReason = 'Sync failed: ' + e.message;
         console.error(e);
@@ -766,6 +782,7 @@ function setPage(p){
   document.getElementById('tab-onhold').className = 'tab' + (p==='on_hold' ? ' active' : '');
   document.getElementById('tab-cold').className = 'tab' + (p==='cold' ? ' active' : '');
   document.getElementById('tab-won').className = 'tab' + (p==='won' ? ' active' : '');
+  document.getElementById('btn-sync-emails-cold').style.display = (p==='cold') ? '' : 'none';
   renderPage();
 }
 function render(){ updateStats(); renderPage(); }
