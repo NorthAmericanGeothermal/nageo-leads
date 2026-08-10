@@ -135,6 +135,12 @@ svg{display:block;}
 .note-btn{margin-top:2px;padding:11px 18px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer;}
 .note-btn:disabled{opacity:0.5;cursor:not-allowed;}
 .section-label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin:18px 0 10px;}
+.section-toggle-hd{display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:10px;}
+.section-toggle-left{display:flex;align-items:center;gap:9px;}
+.section-count{background:var(--surface-alt);color:var(--muted);font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;}
+.section-chevron{width:14px;height:14px;color:var(--muted);flex-shrink:0;transition:transform .15s;display:flex;}
+.section-chevron.open{transform:rotate(180deg);}
+.section-body{margin-top:14px;}
 
 .thread{border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:10px;overflow:hidden;}
 .thread.flag{border-color:#EAC3B4;background:var(--danger-tint);}
@@ -907,38 +913,6 @@ function renderLeadDetail() {
   if (leadHasEmail(l)) html += '<button class="icon-btn" onclick="openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
   html += '</div>';
 
-  // Email history moved up front — it's the thing you actually come to a
-  // lead's page to check most often, so it shouldn't be buried under
-  // address/job-type/status/estimates/notes.
-  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Email history</div>';
-  if (!threads.length) {
-    html += '<div style="font-size:14px;color:var(--muted)">No email threads linked yet.</div>';
-  } else {
-    threads.forEach(function(t){
-      var tOpen = openThreads.has(t.id);
-      var msgs = messagesByThread[t.id] || [];
-      var flagged = t.needs_reply && !isCold && !isOnHold;
-      html += '<div class="thread'+(flagged?' flag':'')+'">';
-      html += '<div class="thread-hd" onclick="toggleThread(\''+t.id+'\')">';
-      if (flagged) html += '<span class="dot"></span>';
-      html += '<span class="thread-subj">'+esc(t.subject||'(no subject)')+'</span>';
-      html += '<span class="thread-time">'+timeAgo(t.last_message_at)+'</span></div>';
-      html += '<div class="msgs'+(tOpen?' open':'')+'">';
-      if (!msgs.length) html += '<div style="padding:12px 14px;font-size:13px;color:var(--muted)">No messages loaded.</div>';
-      msgs.slice().reverse().forEach(function(m){
-        var eOpen = openEmails.has(m.id);
-        var isLast = msgs[msgs.length-1].id === m.id;
-        html += '<div class="msg-row" onclick="toggleEmail(\''+m.id+'\')">';
-        html += '<div class="msg-top"><span class="msg-who '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'Received':'Sent')+' &mdash; '+esc(m.direction==='inbound'?m.from_address:(m.to_addresses||[])[0]||'')+'</span><span class="msg-when">'+niceDate(m.sent_at)+'</span></div>';
-        html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(flagged && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
-        html += '</div>';
-        html += '<div class="full-email'+(eOpen?' open':'')+'" id="fe-'+m.id+'"></div>';
-      });
-      html += '</div></div>';
-    });
-  }
-  html += '</div>';
-
   if (l.address || l.customer_tag_id) {
     html += '<div class="ld-card">';
     if (l.address) html += '<div class="info-line"><b>Address:</b> '+esc(l.address)+'</div>';
@@ -954,56 +928,108 @@ function renderLeadDetail() {
     html += '</div></div>';
   }
 
-  html += '<div class="ld-card"><div class="section-label" style="margin-top:0;display:flex;justify-content:space-between;align-items:center">Estimates<span style="display:flex;gap:6px">';
-  if (l.hcp_customer_id) html += '<a class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted);text-decoration:none" href="https://pro.housecallpro.com/customers/'+esc(l.hcp_customer_id)+'" target="_blank" rel="noopener">Open in HCP &#8599;</a>';
-  html += '<button class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted)" onclick="refreshEstimates(\''+l.id+'\')" id="est-refresh-'+l.id+'">Refresh</button></span></div>';
-  if (!estimates.length) {
-    html += '<div style="font-size:14px;color:var(--muted)">No estimates on file yet.</div>';
-  } else {
-    estimates.forEach(function(e){
-      var num = e.estimate_number || e.id;
-      var status = e.status ? String(e.status).charAt(0).toUpperCase()+String(e.status).slice(1) : '';
-      var approval = e.approval_status ? prettyApproval(e.approval_status) : '';
-      var totalStr = (e.total !== null && e.total !== undefined && e.total !== '') ? '$'+Number(e.total).toLocaleString() : 'Total not on file';
-      // NOTE: no deep link to the individual estimate yet — e.id turned out
-      // not to be the real estimate ID HCP's app uses in its own URLs (it
-      // produced a "csr_..." value instead of the expected "est_...").
-      // Re-add once the correct field is confirmed from a Logs tab check.
-      var estTag = 'div';
-      html += '<'+estTag+' class="est-row" style="display:flex;flex-direction:column;gap:4px;padding:14px 16px">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-weight:700">Estimate #'+esc(num)+'</span><span style="font-weight:700">'+esc(totalStr)+'</span></div>';
-      var metaBits = [];
-      if (status) metaBits.push(status);
-      if (approval) metaBits.push(approval);
-      if (e.sent_at) metaBits.push('Sent '+niceDate(e.sent_at));
-      if (e.approved_at) metaBits.push('Approved '+niceDate(e.approved_at));
-      if (metaBits.length) html += '<div style="font-size:13px;color:var(--muted)">'+esc(metaBits.join(' · '))+'</div>';
-      if (e.options && e.options.length > 1) {
-        html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">'+esc(e.options.map(function(o){
-          var oTotal = (o.total !== null && o.total !== undefined) ? '$'+Number(o.total).toLocaleString() : 'n/a';
-          return (o.name||'Option')+': '+oTotal;
-        }).join(' · '))+'</div>';
-      }
-      html += '</'+estTag+'>';
-    });
+  // Email history: collapsed by default, header shows a total email count
+  // instead of every thread piling up.
+  var totalEmailCount = threads.reduce(function(sum,t){ return sum + (t.message_count || (messagesByThread[t.id]||[]).length); }, 0);
+  var emailCollapsed = sectionCollapsed(l.id, 'email');
+  html += '<div class="ld-card">';
+  html += sectionHeader(l.id, 'email', 'Email history', totalEmailCount);
+  if (!emailCollapsed) {
+    html += '<div class="section-body">';
+    if (!threads.length) {
+      html += '<div style="font-size:14px;color:var(--muted)">No email threads linked yet.</div>';
+    } else {
+      threads.forEach(function(t){
+        var tOpen = openThreads.has(t.id);
+        var msgs = messagesByThread[t.id] || [];
+        var flagged = t.needs_reply && !isCold && !isOnHold;
+        html += '<div class="thread'+(flagged?' flag':'')+'">';
+        html += '<div class="thread-hd" onclick="toggleThread(\''+t.id+'\')">';
+        if (flagged) html += '<span class="dot"></span>';
+        html += '<span class="thread-subj">'+esc(t.subject||'(no subject)')+'</span>';
+        html += '<span class="thread-time">'+timeAgo(t.last_message_at)+'</span></div>';
+        html += '<div class="msgs'+(tOpen?' open':'')+'">';
+        if (!msgs.length) html += '<div style="padding:12px 14px;font-size:13px;color:var(--muted)">No messages loaded.</div>';
+        msgs.slice().reverse().forEach(function(m){
+          var eOpen = openEmails.has(m.id);
+          var isLast = msgs[msgs.length-1].id === m.id;
+          html += '<div class="msg-row" onclick="toggleEmail(\''+m.id+'\')">';
+          html += '<div class="msg-top"><span class="msg-who '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'Received':'Sent')+' &mdash; '+esc(m.direction==='inbound'?m.from_address:(m.to_addresses||[])[0]||'')+'</span><span class="msg-when">'+niceDate(m.sent_at)+'</span></div>';
+          html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(flagged && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
+          html += '</div>';
+          html += '<div class="full-email'+(eOpen?' open':'')+'" id="fe-'+m.id+'"></div>';
+        });
+        html += '</div></div>';
+      });
+    }
+    html += '</div>';
   }
   html += '</div>';
 
-  html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Notes</div>';
+  var estCollapsed = sectionCollapsed(l.id, 'estimates');
+  var estExtra = '';
+  if (l.hcp_customer_id) estExtra += '<a class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted);text-decoration:none" href="https://pro.housecallpro.com/customers/'+esc(l.hcp_customer_id)+'" target="_blank" rel="noopener">Open in HCP &#8599;</a>';
+  estExtra += '<button class="btn-sm" style="border:1px solid var(--border);background:#fff;border-radius:8px;cursor:pointer;padding:5px 11px;font-weight:600;color:var(--muted)" onclick="refreshEstimates(\''+l.id+'\')" id="est-refresh-'+l.id+'">Refresh</button>';
+  html += '<div class="ld-card">';
+  html += sectionHeader(l.id, 'estimates', 'Estimates', estimates.length, estExtra);
+  if (!estCollapsed) {
+    html += '<div class="section-body">';
+    if (!estimates.length) {
+      html += '<div style="font-size:14px;color:var(--muted)">No estimates on file yet.</div>';
+    } else {
+      estimates.forEach(function(e){
+        var num = e.estimate_number || e.id;
+        var status = e.status ? String(e.status).charAt(0).toUpperCase()+String(e.status).slice(1) : '';
+        var approval = e.approval_status ? prettyApproval(e.approval_status) : '';
+        var totalStr = (e.total !== null && e.total !== undefined && e.total !== '') ? '$'+Number(e.total).toLocaleString() : 'Total not on file';
+        // NOTE: no deep link to the individual estimate yet — e.id turned out
+        // not to be the real estimate ID HCP's app uses in its own URLs (it
+        // produced a "csr_..." value instead of the expected "est_...").
+        // Re-add once the correct field is confirmed from a Logs tab check.
+        var estTag = 'div';
+        html += '<'+estTag+' class="est-row" style="display:flex;flex-direction:column;gap:4px;padding:14px 16px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-weight:700">Estimate #'+esc(num)+'</span><span style="font-weight:700">'+esc(totalStr)+'</span></div>';
+        var metaBits = [];
+        if (status) metaBits.push(status);
+        if (approval) metaBits.push(approval);
+        if (e.sent_at) metaBits.push('Sent '+niceDate(e.sent_at));
+        if (e.approved_at) metaBits.push('Approved '+niceDate(e.approved_at));
+        if (metaBits.length) html += '<div style="font-size:13px;color:var(--muted)">'+esc(metaBits.join(' · '))+'</div>';
+        if (e.options && e.options.length > 1) {
+          html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">'+esc(e.options.map(function(o){
+            var oTotal = (o.total !== null && o.total !== undefined) ? '$'+Number(o.total).toLocaleString() : 'n/a';
+            return (o.name||'Option')+': '+oTotal;
+          }).join(' · '))+'</div>';
+        }
+        html += '</'+estTag+'>';
+      });
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+
   // Read-only context imported from HCP at the last sync (whatever was in
   // the customer's notes field back then) — kept separate from the note
   // thread below, which is local-only from here on.
   var importedNoteText = (l.hcp_notes && l.hcp_notes[0] && l.hcp_notes[0].text) ? String(l.hcp_notes[0].text).trim() : '';
-  if (importedNoteText) {
-    html += '<div class="notes-existing"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Imported from Housecall Pro</div>'+esc(importedNoteText)+'</div>';
-  }
   var leadNotes = notesByLead[l.id] || [];
-  leadNotes.forEach(function(n){
-    html += '<div class="notes-existing"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">'+esc(n.user_name||'Dashboard')+' &middot; '+niceDate(n.created_at)+'</div>'+esc(n.detail||'')+'</div>';
-  });
-  html += '<textarea class="note-textarea" id="note-input-'+l.id+'" placeholder="Add a note..."></textarea>';
-  html += '<div class="note-hint">Saved here on the dashboard — not pushed to Housecall Pro.</div>';
-  html += '<button class="note-btn" id="note-btn-'+l.id+'" onclick="addNote(\''+l.id+'\')">Add note</button>';
+  var notesCount = (importedNoteText ? 1 : 0) + leadNotes.length;
+  var notesCollapsed = sectionCollapsed(l.id, 'notes');
+  html += '<div class="ld-card">';
+  html += sectionHeader(l.id, 'notes', 'Notes', notesCount);
+  if (!notesCollapsed) {
+    html += '<div class="section-body">';
+    if (importedNoteText) {
+      html += '<div class="notes-existing"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Imported from Housecall Pro</div>'+esc(importedNoteText)+'</div>';
+    }
+    leadNotes.forEach(function(n){
+      html += '<div class="notes-existing"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">'+esc(n.user_name||'Dashboard')+' &middot; '+niceDate(n.created_at)+'</div>'+esc(n.detail||'')+'</div>';
+    });
+    html += '<textarea class="note-textarea" id="note-input-'+l.id+'" placeholder="Add a note..."></textarea>';
+    html += '<div class="note-hint">Saved here on the dashboard — not pushed to Housecall Pro.</div>';
+    html += '<button class="note-btn" id="note-btn-'+l.id+'" onclick="addNote(\''+l.id+'\')">Add note</button>';
+    html += '</div>';
+  }
   html += '</div>';
 
   html += '<div class="ld-card dz" style="margin-top:20px;border-top:none;padding-top:20px">';
@@ -1048,6 +1074,31 @@ async function refreshEstimates(leadId) {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
   }
+}
+// ── Collapsible cards (Email history / Estimates / Notes) ──────────────────
+// Collapsed by default so opening a lead shows quick counts instead of a
+// wall of content — click a header to expand/collapse. State lives only in
+// memory for the session (per lead + section), not saved to the DB.
+var collapsedSections = {};
+function sectionCollapsed(leadId, key) {
+  var k = leadId + '::' + key;
+  if (!(k in collapsedSections)) collapsedSections[k] = true;
+  return collapsedSections[k];
+}
+function toggleSection(leadId, key) {
+  collapsedSections[leadId + '::' + key] = !sectionCollapsed(leadId, key);
+  renderLeadDetail();
+}
+function sectionHeader(leadId, key, title, count, extraHtml) {
+  var collapsed = sectionCollapsed(leadId, key);
+  var h = '<div class="section-toggle-hd" onclick="toggleSection(\''+leadId+'\',\''+key+'\')">';
+  h += '<div class="section-toggle-left"><span class="section-label" style="margin:0">'+esc(title)+'</span>';
+  h += '<span class="section-count">'+count+'</span></div>';
+  h += '<div style="display:flex;align-items:center;gap:8px">';
+  if (extraHtml) h += '<span style="display:inline-flex;gap:6px" onclick="event.stopPropagation()">'+extraHtml+'</span>';
+  h += '<span class="section-chevron'+(collapsed?'':' open')+'">'+ICONS.chevron+'</span>';
+  h += '</div></div>';
+  return h;
 }
 function toggleThread(id){ if(openThreads.has(id))openThreads.delete(id);else openThreads.add(id); renderLeadDetail(); }
 function toggleEmail(id){
