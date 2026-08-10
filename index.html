@@ -301,6 +301,14 @@ svg{display:block;}
       </div>
       <button class="btn btn-sm" id="btn-repair-dates" onclick="repairThreadDates()">Fix email thread dates</button>
     </div>
+    <div class="modal-row">
+      <div class="modal-label">AI summaries</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
+        Summaries are cached and only ever regenerate when you ask, to save AI credits. This checks
+        which active leads have new email activity since their last summary and updates just those.
+      </div>
+      <button class="btn btn-sm" id="btn-update-overviews" onclick="updateAllOverviews()">Update AI overviews</button>
+    </div>
     <div class="modal-btns">
       <button class="modal-cancel" onclick="closeSettings()">Close</button>
       <button class="modal-danger" style="background:var(--accent)" onclick="saveSettings()">Save</button>
@@ -336,6 +344,7 @@ svg{display:block;}
 <div class="modal-bg" id="email-modal">
   <div class="modal" style="width:360px">
     <div class="modal-title">Email <span id="email-modal-address" style="font-weight:400;color:var(--muted);font-size:16px;display:block;margin-top:4px;word-break:break-all;"></span></div>
+    <div id="email-modal-list" style="display:flex;flex-direction:column;gap:6px;margin-top:0.75rem;"></div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:1.25rem;">
       <button class="btn btn-accent" style="width:100%;height:50px" onclick="copyEmailAddress()">Copy email address</button>
       <button class="btn" style="width:100%;height:50px" onclick="openEmailApp()">Open in email app</button>
@@ -353,6 +362,18 @@ svg{display:block;}
     <div class="sync-progress-stats" id="sync-progress-stats"></div>
     <div class="modal-btns">
       <button class="modal-cancel" id="sync-progress-stop-btn" onclick="cancelEmailSync()">Stop after this pass</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI overview refresh confirm modal -->
+<div class="modal-bg" id="overview-refresh-modal">
+  <div class="modal">
+    <div class="modal-title">Update AI summaries?</div>
+    <div class="modal-row" style="font-size:15px;color:var(--muted)" id="overview-refresh-desc"></div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeOverviewRefreshModal()">Not now</button>
+      <button class="modal-danger" style="background:var(--accent)" onclick="confirmOverviewRefresh()">Update summaries</button>
     </div>
   </div>
 </div>
@@ -817,7 +838,7 @@ function renderLeadTile(l, i) {
   html += '<div class="tile-actions">';
   if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'" onclick="event.stopPropagation()">'+ICONS.phone+' '+esc(l.phone)+'</a>';
   else html += '<div class="call-btn" style="background:var(--surface-alt);color:var(--muted);cursor:default;box-shadow:none">No phone on file</div>';
-  if (l.primary_email) html += '<button class="icon-btn" onclick="event.stopPropagation();openEmailChoice(\''+esc(l.primary_email).replace(/'/g,"\\'")+'\')" title="Email">'+ICONS.mailLg+'</button>';
+  if (l.primary_email || (l.contact_emails||[]).length) html += '<button class="icon-btn" onclick="event.stopPropagation();openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
   html += '</div></div>';
   return html;
 }
@@ -866,7 +887,7 @@ function renderLeadDetail() {
   html += '<div class="ld-actions">';
   if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'">'+ICONS.phone+' '+esc(l.phone)+'</a>';
   else html += '<div class="call-btn" style="background:var(--surface-alt);color:var(--muted);cursor:default;box-shadow:none">No phone on file</div>';
-  if (l.primary_email) html += '<button class="icon-btn" onclick="openEmailChoice(\''+esc(l.primary_email).replace(/'/g,"\\'")+'\')" title="Email">'+ICONS.mailLg+'</button>';
+  if (l.primary_email || (l.contact_emails||[]).length) html += '<button class="icon-btn" onclick="openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
   html += '</div>';
 
   if (l.address || l.customer_tag_id) {
@@ -1095,11 +1116,38 @@ async function confirmDelete(id) {
 }
 
 // ── Email choice (copy vs. open default mail app) ──────────────────────────
+// Leads can have more than one email on file (a spouse, property manager,
+// etc.) — this used to only ever look at primary_email, silently ignoring
+// any others in contact_emails. Now it opens with every known address for
+// the lead, defaulting to the primary one, and lets you switch which one
+// you're copying/emailing if there's more than one.
 var emailModalAddress = '';
-function openEmailChoice(addr) {
+var emailModalAddresses = [];
+function openEmailChoice(leadId) {
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  var addrs = [];
+  if (l.primary_email) addrs.push(l.primary_email);
+  (l.contact_emails||[]).forEach(function(e){
+    if (e && addrs.every(function(a){ return a.toLowerCase() !== e.toLowerCase(); })) addrs.push(e);
+  });
+  if (!addrs.length) return;
+  emailModalAddresses = addrs;
+  selectEmailAddress(addrs[0]);
+  document.getElementById('email-modal').classList.add('open');
+}
+function selectEmailAddress(addr) {
   emailModalAddress = addr;
   document.getElementById('email-modal-address').textContent = addr;
-  document.getElementById('email-modal').classList.add('open');
+  var list = document.getElementById('email-modal-list');
+  if (emailModalAddresses.length > 1) {
+    list.innerHTML = emailModalAddresses.map(function(a){
+      var active = a === emailModalAddress;
+      return '<button class="btn'+(active?' btn-accent':'')+'" style="width:100%;justify-content:flex-start;text-align:left;font-size:14px" onclick="selectEmailAddress(\''+esc(a).replace(/'/g,"\\'")+'\')">'+(active?'&#10003;&nbsp; ':'')+esc(a)+'</button>';
+    }).join('');
+  } else {
+    list.innerHTML = '';
+  }
 }
 function closeEmailModal(){ document.getElementById('email-modal').classList.remove('open'); }
 function copyEmailAddress() {
@@ -1207,23 +1255,71 @@ async function openPresentation() {
   presIndex = 0;
   document.getElementById('presentation').classList.add('open');
   renderPresSlide();
-  refreshStaleOverviews(presLeads.slice());
+  offerOverviewRefresh(presLeads.slice(), 'presentation');
 }
-// Regenerate any missing OR stale overviews, one at a time (sequential —
-// firing them all in parallel was overloading things and failing silently).
 // "Stale" means the lead has email activity newer than the last time we
 // asked Gemini for a summary — otherwise a lead synced with an old
 // empty-inbox overview would show that forever even after real emails
-// came in. Errors are logged to the console instead of swallowed, so a
-// real failure (bad API key, rate limit, etc.) is at least visible.
+// came in.
+function isOverviewStale(l) {
+  var threads = threadsByLead[l.id] || [];
+  var latestActivity = null;
+  threads.forEach(function(t){ if (!latestActivity || new Date(t.last_message_at) > new Date(latestActivity)) latestActivity = t.last_message_at; });
+  return !l.ai_overview || (latestActivity && (!l.ai_overview_generated_at || new Date(latestActivity) > new Date(l.ai_overview_generated_at)));
+}
+// ── AI overview refresh — manual, credit-conscious ──────────────────────────
+// Overviews used to regenerate silently in the background any time
+// presentation mode opened, which could quietly burn AI credits. Now both
+// entry points (opening presentation mode, and the Settings button) just
+// queue up the stale leads and show a confirm modal with a note on when
+// things were last updated, so you can skip it if it probably hasn't changed.
+var overviewRefreshPending = [];
+var overviewRefreshContext = null;
+function offerOverviewRefresh(list, context) {
+  var stale = list.filter(isOverviewStale);
+  if (!stale.length) {
+    if (context === 'settings') showToast('All summaries already look current.');
+    return;
+  }
+  overviewRefreshPending = stale;
+  overviewRefreshContext = context;
+  var mostRecent = null;
+  list.forEach(function(l){
+    if (l.ai_overview_generated_at && (!mostRecent || new Date(l.ai_overview_generated_at) > new Date(mostRecent))) mostRecent = l.ai_overview_generated_at;
+  });
+  var lastLine = mostRecent ? ('Most recent summary was generated ' + timeAgo(mostRecent) + '.') : 'None of these have a summary yet.';
+  document.getElementById('overview-refresh-desc').textContent =
+    stale.length + ' of ' + list.length + ' lead summar' + (stale.length===1?'y looks':'ies look') + ' outdated. ' + lastLine + ' Updating uses AI credits.';
+  document.getElementById('overview-refresh-modal').classList.add('open');
+}
+function closeOverviewRefreshModal() {
+  document.getElementById('overview-refresh-modal').classList.remove('open');
+  overviewRefreshPending = []; overviewRefreshContext = null;
+}
+async function confirmOverviewRefresh() {
+  var list = overviewRefreshPending, context = overviewRefreshContext;
+  document.getElementById('overview-refresh-modal').classList.remove('open');
+  overviewRefreshPending = []; overviewRefreshContext = null;
+  if (!list.length) return;
+  if (context === 'settings') showToast('Updating ' + list.length + ' summar' + (list.length===1?'y':'ies') + '…');
+  await refreshStaleOverviews(list);
+  if (context === 'settings') showToast('Done updating summaries.');
+}
+// Settings-modal entry point: checks every non-cold lead, not just the ones
+// currently queued up in presentation mode.
+function updateAllOverviews() {
+  var list = leads.filter(function(l){ return l.status !== 'cold'; });
+  if (!list.length) { showToast('No active leads to update.'); return; }
+  offerOverviewRefresh(list, 'settings');
+}
+// Regenerate overviews one at a time (sequential — firing them all in
+// parallel was overloading things and failing silently). Errors are logged
+// to the console instead of swallowed, so a real failure (bad API key,
+// rate limit, etc.) is at least visible. `list` is expected to already be
+// filtered down to the leads the user confirmed updating.
 async function refreshStaleOverviews(list) {
   for (var i = 0; i < list.length; i++) {
-    if (!document.getElementById('presentation').classList.contains('open')) return;
     var l = list[i];
-    var threads = threadsByLead[l.id] || [];
-    var latestActivity = threads.length ? threads[0].last_message_at : null;
-    var stale = !l.ai_overview || (latestActivity && (!l.ai_overview_generated_at || new Date(latestActivity) > new Date(l.ai_overview_generated_at)));
-    if (!stale) continue;
     try {
       var res = await callLeadFn({ action: 'generate_overview', lead_id: l.id });
       if (res && res.overview) {
@@ -1232,12 +1328,12 @@ async function refreshStaleOverviews(list) {
         var master = leads.find(function(x){return x.id===l.id;});
         if (master) { master.ai_overview = res.overview; master.ai_overview_generated_at = genAt; }
         var current = presLeads[presIndex];
-        if (current && current.id === l.id) renderPresSlide();
+        if (current && current.id === l.id && document.getElementById('presentation').classList.contains('open')) renderPresSlide();
       } else {
-        console.warn('[presentation] overview regen failed for', l.customer_name, res && res.error);
+        console.warn('[overview] regen failed for', l.customer_name, res && res.error);
       }
     } catch (e) {
-      console.warn('[presentation] overview regen failed for', l.customer_name, e);
+      console.warn('[overview] regen failed for', l.customer_name, e);
     }
   }
 }
