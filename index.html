@@ -79,6 +79,34 @@ svg{display:block;}
 .tile:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
 .tile.flag{box-shadow:var(--shadow-sm),inset 4px 0 0 var(--danger);}
 .tile:hover.flag{box-shadow:var(--shadow-md),inset 4px 0 0 var(--danger);}
+
+/* ── Pipeline board (styled to match the team's Housecall Pro pipeline
+   board, since that's the layout the sales team already knows) ── */
+.main.wide{max-width:1700px;}
+.pipeline-board{display:flex;gap:14px;overflow-x:auto;padding-bottom:14px;align-items:flex-start;}
+.pipeline-col{flex:0 0 240px;background:var(--surface-alt);border-radius:var(--radius-lg);display:flex;flex-direction:column;max-height:calc(100vh - 300px);min-height:160px;transition:background .12s;}
+.pipeline-col.drag-over{background:var(--accent-tint);}
+.pipeline-col.special{background:var(--surface);border:1.5px dashed var(--border);}
+.pipeline-col.special.drag-over{border-color:var(--accent);background:var(--accent-tint);}
+.pipeline-col-hd{padding:14px 14px 10px;}
+.pipeline-col-hd-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.pipeline-col-title{font-size:15px;font-weight:700;color:var(--ink);}
+.pipeline-col-count{font-size:14px;font-weight:700;color:var(--muted);}
+.pipeline-col-total{font-size:12px;color:var(--muted);margin-top:2px;}
+.pipeline-col-body{overflow-y:auto;padding:0 10px 10px;display:flex;flex-direction:column;gap:8px;flex:1;}
+.pipeline-empty{font-size:13px;color:var(--muted);padding:10px 4px;}
+.pipeline-drop-hint{font-size:13px;color:var(--muted);padding:16px 8px;text-align:center;font-style:italic;}
+.pipeline-card{background:var(--surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:14px;cursor:grab;transition:box-shadow .15s,opacity .15s;}
+.pipeline-card:hover{box-shadow:var(--shadow-md);}
+.pipeline-card.flag{box-shadow:var(--shadow-sm),inset 3px 0 0 var(--danger);}
+.pipeline-card.dragging{opacity:0.4;}
+.pipeline-card-tagid{font-size:12px;color:var(--muted);margin-bottom:2px;}
+.pipeline-card-name{font-size:14px;font-weight:700;letter-spacing:-0.01em;margin-bottom:2px;line-height:1.3;}
+.pipeline-card-value{font-size:13px;color:var(--muted);margin-bottom:10px;}
+.pipeline-card-select{width:100%;font-size:13px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 10px;cursor:pointer;margin-bottom:8px;}
+.pipeline-card-footer{font-size:11.5px;color:var(--muted);}
+.pipeline-card-footer b{color:var(--ink);font-weight:600;}
+.pipeline-card-flag{font-size:12px;color:var(--danger-text);font-weight:600;margin-bottom:6px;}
 .tile-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;}
 .tile-name{font-size:19px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;}
 .tile-info{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;min-height:20px;}
@@ -94,6 +122,7 @@ svg{display:block;}
 .badge-est{background:var(--success-tint);color:var(--success-text);}
 .badge-cold{background:var(--surface-alt);color:var(--muted);}
 .badge-hold{background:var(--warning-tint);color:var(--warning-text);}
+.badge-won{background:var(--success-tint);color:var(--success-text);}
 .badge-jobtype-new_construction{background:var(--sage-tint);color:var(--sage-text);}
 .badge-jobtype-retrofit{background:var(--accent-tint);color:var(--accent-text);}
 .badge-jobtype-replacement{background:var(--warning-tint);color:var(--warning-text);}
@@ -269,9 +298,11 @@ svg{display:block;}
     </div>
 
     <div class="tabs">
-      <button class="tab active" id="tab-active" onclick="setPage('active')">Active leads</button>
+      <button class="tab active" id="tab-pipeline" onclick="setPage('pipeline')">Pipeline</button>
+      <button class="tab" id="tab-active" onclick="setPage('active')">Active leads</button>
       <button class="tab" id="tab-onhold" onclick="setPage('on_hold')">On hold</button>
       <button class="tab" id="tab-cold" onclick="setPage('cold')">Cold leads</button>
+      <button class="tab" id="tab-won" onclick="setPage('won')">Won</button>
     </div>
 
     <div class="search-row" id="search-row-icon"><input type="text" id="search-input" placeholder="Search by name or phone" oninput="renderPage()"></div>
@@ -470,7 +501,7 @@ var currentUser = null, users = [];
 var leads = [], gmailAccounts = [];
 var openThreads = new Set(), openEmails = new Set(), showDel = new Set();
 var threadsByLead = {}, messagesByThread = {}, notesByLead = {};
-var currentPage = 'active';
+var currentPage = 'pipeline';
 var appSettings = {};
 var coldModalLeadId = null;
 
@@ -730,14 +761,16 @@ function renderGmail() {
 // ── Page / stats ─────────────────────────────────────────────────────────
 function setPage(p){
   currentPage = p;
+  document.getElementById('tab-pipeline').className = 'tab' + (p==='pipeline' ? ' active' : '');
   document.getElementById('tab-active').className = 'tab' + (p==='active' ? ' active' : '');
   document.getElementById('tab-onhold').className = 'tab' + (p==='on_hold' ? ' active' : '');
   document.getElementById('tab-cold').className = 'tab' + (p==='cold' ? ' active' : '');
+  document.getElementById('tab-won').className = 'tab' + (p==='won' ? ' active' : '');
   renderPage();
 }
 function render(){ updateStats(); renderPage(); }
 function updateStats() {
-  var active = leads.filter(function(l){return l.status!=='cold' && l.status!=='on_hold';});
+  var active = leads.filter(function(l){return l.status!=='cold' && l.status!=='on_hold' && l.status!=='won';});
   // Count LEADS that need a reply, not the raw number of unanswered threads —
   // a single active lead with 3 unanswered threads should still only count
   // once here, so this stays sensible next to the "Active leads" total.
@@ -762,7 +795,7 @@ function niceDate(ts){
 function leadReplyCount(leadId){
   var l = leads.find(function(x){return x.id===leadId;});
   // Reply-needed only ever applies to leads on the Active leads page.
-  if (l && (l.status === 'cold' || l.status === 'on_hold')) return 0;
+  if (l && (l.status === 'cold' || l.status === 'on_hold' || l.status === 'won')) return 0;
   return (threadsByLead[leadId]||[]).filter(function(t){return t.needs_reply;}).length;
 }
 function digitsOnly(s){ return (s||'').replace(/[^0-9]/g,''); }
@@ -770,10 +803,13 @@ function digitsOnly(s){ return (s||'').replace(/[^0-9]/g,''); }
 // ── Leads list ────────────────────────────────────────────────────────────
 function renderPage() {
   var q = (document.getElementById('search-input').value || '').toLowerCase();
+  document.querySelector('.main').classList.toggle('wide', currentPage === 'pipeline');
+  if (currentPage === 'pipeline') { renderPipelineBoard(q); return; }
   var pool = leads.filter(function(l){
     if (currentPage==='cold') return l.status==='cold';
     if (currentPage==='on_hold') return l.status==='on_hold';
-    return l.status!=='cold' && l.status!=='on_hold';
+    if (currentPage==='won') return l.status==='won';
+    return l.status!=='cold' && l.status!=='on_hold' && l.status!=='won';
   });
   var list = pool.filter(function(l){
     if (!q) return true;
@@ -792,6 +828,8 @@ function renderPage() {
       ? 'No cold leads yet.'
       : currentPage==='on_hold'
       ? 'No leads on hold.'
+      : currentPage==='won'
+      ? 'No won leads yet.'
       : 'No leads yet. Click "Sync HCP" to pull customers tagged "'+esc(appSettings.leadHcpTag||'Prospect')+'".') + '</div>';
     return;
   }
@@ -824,11 +862,13 @@ function renderLeadTile(l, i) {
   var estimates = l.estimates || [];
   var isCold = l.status === 'cold';
   var isOnHold = l.status === 'on_hold';
+  var isWon = l.status === 'won';
   var stagger = 'style="--i:'+((i||0) % 14)+'"';
   var html = '<div class="tile'+(replyCount>0?' flag':'')+'" '+stagger+' onclick="openLeadDetail(\''+l.id+'\')">';
   html += '<div class="tile-top"><div class="tile-name">'+esc(l.customer_name||'Unknown')+'</div><div class="badges">';
   if (isCold) html += '<span class="badge badge-cold">Cold</span>';
   else if (isOnHold) html += '<span class="badge badge-hold">On hold</span>';
+  else if (isWon) html += '<span class="badge badge-won">Won</span>';
   else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
   if (l.job_type) html += '<span class="badge badge-jobtype-'+esc(l.job_type)+'">'+esc(prettyJobType(l.job_type))+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Reply needed</span>';
@@ -858,7 +898,11 @@ function renderLeadTile(l, i) {
   if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'" onclick="event.stopPropagation()">'+ICONS.phone+' '+esc(l.phone)+'</a>';
   else html += '<div class="call-btn" style="background:var(--surface-alt);color:var(--muted);cursor:default;box-shadow:none">No phone on file</div>';
   if (leadHasEmail(l)) html += '<button class="icon-btn" onclick="event.stopPropagation();openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
-  html += '</div></div>';
+  html += '</div>';
+  // Quick reactivate straight from the Cold leads tile — no need to open
+  // the full profile just to move a lead back into the pipeline.
+  if (isCold) html += '<button class="btn btn-sm" style="width:100%;margin-top:10px" onclick="event.stopPropagation();openReactivateModal(\''+esc(l.id)+'\')">Add to pipeline</button>';
+  html += '</div>';
   return html;
 }
 
@@ -885,14 +929,19 @@ function renderLeadDetail() {
   var estimates = l.estimates || [];
   var isCold = l.status === 'cold';
   var isOnHold = l.status === 'on_hold';
+  var isWon = l.status === 'won';
   var replyCount = leadReplyCount(l.id);
 
   var html = '<div class="ld-name-row"><div class="ld-name">'+esc(l.customer_name||'Unknown')+'</div><div class="badges">';
   if (isCold) html += '<span class="badge badge-cold">Cold lead</span>';
   else if (isOnHold) html += '<span class="badge badge-hold">On hold</span>';
+  else if (isWon) html += '<span class="badge badge-won">Won</span>';
   else html += '<span class="badge badge-status">'+esc(prettyStatus(l.status))+'</span>';
   if (estimates.length) html += '<span class="badge badge-est">'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+'</span>';
   if (replyCount>0) html += '<span class="badge badge-flag">Needs a reply</span>';
+  // Pipeline stage is set from the Pipeline board (drag & drop), not here —
+  // this is a read-only indicator of where the lead currently sits.
+  if (!isCold && !isOnHold && !isWon) html += '<span class="badge badge-status" title="Change this from the Pipeline tab">'+esc(prettyPipelineStage(l.pipeline_stage))+'</span>';
   // Job type lives as a tag here instead of its own card — click it to
   // change/remove it, or click the "+ Job type" placeholder to set one.
   if (l.job_type) html += '<span class="badge badge-jobtype-'+esc(l.job_type)+'" style="cursor:pointer" onclick="openJobTypeModal(\''+esc(l.id)+'\')" title="Click to remove">'+esc(prettyJobType(l.job_type))+'</span>';
@@ -1026,7 +1075,7 @@ function renderLeadDetail() {
       html += '<div class="notes-existing"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">'+esc(n.user_name||'Dashboard')+' &middot; '+niceDate(n.created_at)+'</div>'+esc(n.detail||'')+'</div>';
     });
     html += '<textarea class="note-textarea" id="note-input-'+l.id+'" placeholder="Add a note..."></textarea>';
-    html += '<div class="note-hint">Saved here on the dashboard — not pushed to Housecall Pro.</div>';
+    html += '<div class="note-hint">Saved here on the dashboard, and appended to this customer\'s notes field in Housecall Pro.</div>';
     html += '<button class="note-btn" id="note-btn-'+l.id+'" onclick="addNote(\''+l.id+'\')">Add note</button>';
     html += '</div>';
   }
@@ -1045,6 +1094,8 @@ function renderLeadDetail() {
     } else if (isOnHold) {
       html += '<button class="reactivate-btn" onclick="openReactivateModal(\''+l.id+'\')">Move back to active</button>';
       html += '<button class="cold-btn" onclick="openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
+    } else if (isWon) {
+      html += '<button class="reactivate-btn" onclick="openReactivateModal(\''+l.id+'\')">Move back to active</button>';
     } else {
       html += '<button class="hold-btn" onclick="putOnHold(\''+l.id+'\')">Put on hold</button>';
       html += '<button class="cold-btn" onclick="openColdModal(\''+l.id+'\')">Mark as cold lead</button>';
@@ -1056,6 +1107,183 @@ function renderLeadDetail() {
   el.innerHTML = html;
 }
 function prettyStatus(s){ return { new:'New', contacted:'Contacted', quoted:'Quoted', won:'Won', lost:'Lost', cold:'Cold', on_hold:'On hold' }[s] || s; }
+// ── Pipeline board columns ──────────────────────────────────────────────────
+// The first 7 are purely local (leads.pipeline_stage) — dragging a card
+// between them just recategorizes it, no HCP call. The last 3 are "special":
+// dropping a card on them triggers the same real status-changing actions as
+// the buttons on the lead's own profile page (put on hold / mark cold /
+// mark won), each of which also updates HCP's tags, so those cards leave
+// the Pipeline board entirely and show up on the On hold / Cold / Won tab
+// instead once confirmed.
+var PIPELINE_STAGES = [
+  { key: 'new_lead', label: 'New Lead' },
+  { key: 'first_contact', label: 'First Contact' },
+  { key: 'new_construction', label: 'New Construction' },
+  { key: 'geo1_active', label: 'GEO 1 Active' },
+  { key: 'geo2_active', label: 'GEO 2 Active' },
+  { key: 'second_contact', label: 'Second Contact' },
+  { key: 'third_contact', label: 'Third Contact' },
+];
+var PIPELINE_SPECIAL_COLUMNS = [
+  { key: 'on_hold', label: 'On Hold' },
+  { key: 'marketing_effort', label: 'Marketing Effort Required / Lease Update Blast' },
+  { key: 'won', label: 'Won' },
+];
+function prettyPipelineStage(s){
+  var found = PIPELINE_STAGES.find(function(p){ return p.key === s; });
+  return found ? found.label : 'New Lead';
+}
+
+// ── Pipeline board rendering + drag-and-drop ────────────────────────────────
+// $ value per lead = sum of every estimate's total on file for that lead —
+// a rough "deal size" figure, same idea as the $ totals on the HCP board.
+function leadPipelineValue(l) {
+  return (l.estimates||[]).reduce(function(sum, e){ return sum + (Number(e.total) || 0); }, 0);
+}
+function formatMoney(n) {
+  return '$' + Number(n||0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function renderPipelineBoard(q) {
+  var pool = leads.filter(function(l){ return l.status!=='cold' && l.status!=='on_hold' && l.status!=='won'; });
+  if (q) {
+    pool = pool.filter(function(l){
+      var hay = ((l.customer_name||'')+' '+(l.phone||'')+' '+(l.primary_email||'')+' '+(l.contact_emails||[]).join(' ')+' '+(l.manual_emails||[]).join(' ')).toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  var el = document.getElementById('leads-list');
+  var specialKeys = PIPELINE_SPECIAL_COLUMNS.map(function(c){return c.key;});
+  var allColumns = PIPELINE_STAGES.concat(PIPELINE_SPECIAL_COLUMNS);
+  var html = '<div class="pipeline-board">';
+  allColumns.forEach(function(col){
+    var isSpecial = specialKeys.indexOf(col.key) !== -1;
+    var colLeads = isSpecial ? [] : pool.filter(function(l){ return (l.pipeline_stage || 'new_lead') === col.key; });
+    var colTotal = colLeads.reduce(function(sum, l){ return sum + leadPipelineValue(l); }, 0);
+    html += '<div class="pipeline-col'+(isSpecial?' special':'')+'" ondragover="allowDrop(event)" ondragleave="dragLeaveCol(event)" ondrop="dropOnColumn(event,\''+col.key+'\')">';
+    html += '<div class="pipeline-col-hd"><div class="pipeline-col-hd-top"><span class="pipeline-col-title">'+esc(col.label)+'</span><span class="pipeline-col-count">'+colLeads.length+'</span></div>';
+    html += '<div class="pipeline-col-total">'+formatMoney(colTotal)+' total</div></div>';
+    html += '<div class="pipeline-col-body">';
+    if (isSpecial) {
+      var hint = col.key==='on_hold' ? 'Drop a lead here to put it on hold'
+        : col.key==='marketing_effort' ? 'Drop a lead here to move it to Cold leads'
+        : 'Drop a lead here to mark it Won';
+      html += '<div class="pipeline-drop-hint">'+esc(hint)+'</div>';
+    } else if (!colLeads.length) {
+      html += '<div class="pipeline-empty">No leads here.</div>';
+    } else {
+      colLeads.forEach(function(l){ html += renderPipelineCard(l); });
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+function renderPipelineCard(l) {
+  var replyCount = leadReplyCount(l.id);
+  var currentStage = l.pipeline_stage || 'new_lead';
+  var html = '<div class="pipeline-card'+(replyCount>0?' flag':'')+'" draggable="true" ondragstart="dragStartCard(event,\''+l.id+'\')" ondragend="dragEndCard(event)" onclick="openLeadDetail(\''+l.id+'\')">';
+  if (l.customer_tag_id) html += '<div class="pipeline-card-tagid">Lead #'+esc(l.customer_tag_id)+'</div>';
+  html += '<div class="pipeline-card-name">'+esc(l.customer_name||'Unknown')+'</div>';
+  html += '<div class="pipeline-card-value">'+formatMoney(leadPipelineValue(l))+'</div>';
+  if (replyCount>0) html += '<div class="pipeline-card-flag">Needs a reply</div>';
+  if (l.job_type) html += '<div style="margin-bottom:8px"><span class="badge badge-jobtype-'+esc(l.job_type)+'">'+esc(prettyJobType(l.job_type))+'</span></div>';
+  html += '<select class="pipeline-card-select" draggable="false" onclick="event.stopPropagation()" onchange="handleStageSelect(this,\''+l.id+'\')">';
+  PIPELINE_STAGES.concat(PIPELINE_SPECIAL_COLUMNS).forEach(function(col){
+    html += '<option value="'+col.key+'"'+(col.key===currentStage?' selected':'')+'>'+esc(col.label)+'</option>';
+  });
+  html += '</select>';
+  html += '<div class="pipeline-card-footer">Status updated <b>'+timeAgo(l.pipeline_stage_updated_at || l.created_at)+'</b></div>';
+  html += '</div>';
+  return html;
+}
+var draggedLeadId = null;
+function dragStartCard(e, leadId) {
+  draggedLeadId = leadId;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', leadId); } catch (err) { /* Safari quirk, draggedLeadId still works */ }
+  }
+  e.currentTarget.classList.add('dragging');
+}
+function dragEndCard(e) {
+  e.currentTarget.classList.remove('dragging');
+  draggedLeadId = null;
+}
+function allowDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+function dragLeaveCol(e) {
+  if (e.currentTarget === e.target) e.currentTarget.classList.remove('drag-over');
+}
+function dropOnColumn(e, columnKey) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  var leadId = draggedLeadId || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : null);
+  draggedLeadId = null;
+  if (!leadId) return;
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  if (columnKey === 'on_hold') { putOnHold(leadId); return; }
+  if (columnKey === 'marketing_effort') { openColdModal(leadId); return; }
+  if (columnKey === 'won') { confirmMarkWon(leadId); return; }
+  if ((l.pipeline_stage || 'new_lead') === columnKey) return;
+  moveLeadPipelineStage(leadId, columnKey);
+}
+// Same routing as dropOnColumn, but from the dropdown selector on each card
+// — an explicit-click alternative to dragging, for anyone who'd rather pick
+// from a list than drag. Special columns snap the dropdown back to the
+// current stage immediately (since they trigger a confirm step that might
+// get cancelled); loadAll()/re-render handles it properly once confirmed.
+function handleStageSelect(selectEl, leadId) {
+  var newStage = selectEl.value;
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  var current = l.pipeline_stage || 'new_lead';
+  if (newStage === current) return;
+  if (newStage === 'on_hold') { selectEl.value = current; putOnHold(leadId); return; }
+  if (newStage === 'marketing_effort') { selectEl.value = current; openColdModal(leadId); return; }
+  if (newStage === 'won') { selectEl.value = current; confirmMarkWon(leadId); return; }
+  moveLeadPipelineStage(leadId, newStage);
+}
+// Local-only move between the 7 non-terminal columns — no HCP call, same
+// idea as job_type. Optimistic UI update with rollback on failure.
+async function moveLeadPipelineStage(leadId, stage) {
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  var prev = l.pipeline_stage;
+  var prevStamp = l.pipeline_stage_updated_at;
+  var nowIso = new Date().toISOString();
+  l.pipeline_stage = stage;
+  l.pipeline_stage_updated_at = nowIso;
+  renderPipelineBoard((document.getElementById('search-input').value||'').toLowerCase());
+  var r = await sb.from('leads').update({ pipeline_stage: stage, pipeline_stage_updated_at: nowIso, updated_at: nowIso }).eq('id', leadId);
+  if (r.error) {
+    l.pipeline_stage = prev;
+    l.pipeline_stage_updated_at = prevStamp;
+    showToast('Could not move that lead — try again.');
+    renderPipelineBoard((document.getElementById('search-input').value||'').toLowerCase());
+    return;
+  }
+  showToast((l.customer_name||'Lead') + ' moved to ' + prettyPipelineStage(stage) + '.');
+}
+async function confirmMarkWon(leadId) {
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  if (!confirm('Mark ' + l.customer_name + ' as Won? This removes the Prospect/Cold/On-Hold tags in Housecall Pro and moves them to the Won tab.')) {
+    renderPage(); // redraw so the card snaps back if it visually moved
+    return;
+  }
+  showToast('Marking as won…');
+  try {
+    var data = await callLeadFn({ action: 'mark_won', lead_id: leadId });
+    if (data.error) { showToast('Could not mark as won: ' + data.error); return; }
+    showToast(l.customer_name + ' marked as Won!');
+    await loadAll();
+  } catch (e) {
+    showToast('Could not mark as won.'); console.error(e);
+  }
+}
 function prettyJobType(s){ return { new_construction:'New Construction', retrofit:'Retrofit', replacement:'Replacement' }[s] || s; }
 function prettyApproval(s){ return { pro_approved:'Pro approved', customer_approved:'Customer approved', declined:'Declined', pending:'Pending' }[s] || s; }
 async function refreshEstimates(leadId) {
@@ -1193,8 +1421,27 @@ async function addNote(leadId) {
     if (res.error) { showToast('Could not save note: ' + res.error.message); return; }
     if (!notesByLead[leadId]) notesByLead[leadId] = [];
     notesByLead[leadId].push(res.data);
-    showToast('Note added.');
+    ta.value = '';
     renderLeadDetail();
+
+    // Best-effort push to HCP too — this is only ever called once, right
+    // here, for the ONE note just added. It must never run automatically
+    // from a resync, since that's what caused the old duplication bug.
+    var l = leads.find(function(x){return x.id===leadId;});
+    if (l && l.hcp_customer_id) {
+      try {
+        var hcpRes = await callLeadFn({ action: 'push_note', lead_id: leadId, note_text: text, user_name: currentUser.name });
+        if (hcpRes && hcpRes.ok) {
+          showToast('Note added and pushed to Housecall Pro.');
+        } else {
+          showToast('Note saved here, but could not push to Housecall Pro' + (hcpRes && hcpRes.error ? (': ' + hcpRes.error) : '.'));
+        }
+      } catch (e) {
+        showToast('Note saved here, but could not push to Housecall Pro.'); console.error(e);
+      }
+    } else {
+      showToast('Note added.');
+    }
   } catch (e) {
     showToast('Could not save note.'); console.error(e);
   } finally {
@@ -1342,7 +1589,7 @@ function openReactivateModal(leadId) {
   var l = leads.find(function(x){return x.id===leadId;}); if (!l) return;
   coldModalMode = 'active';
   coldModalLeadId = leadId;
-  var fromLabel = l.status === 'on_hold' ? 'the on-hold tag' : 'the cold-lead tag';
+  var fromLabel = l.status === 'on_hold' ? 'the on-hold tag' : l.status === 'won' ? '(nothing — won leads already have their tags cleared)' : 'the cold-lead tag';
   document.getElementById('cold-modal-title').textContent = 'Move back to active leads?';
   document.getElementById('cold-modal-desc').innerHTML = 'This removes '+fromLabel+' in Housecall Pro, adds the active-lead tag back, and moves <strong id="cold-modal-name" style="color:var(--ink)"></strong> back to Active leads as a new lead.';
   document.getElementById('cold-modal-name').textContent = l.customer_name;
