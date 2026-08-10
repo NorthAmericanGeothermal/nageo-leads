@@ -795,11 +795,21 @@ function renderLeadTile(l, i) {
   html += '<div class="tile-info">';
   if (l.address) html += '<div class="tile-row">'+ICONS.pin+'<span>'+esc(l.address)+'</span></div>';
   if (estimates.length) html += '<div class="tile-row">'+ICONS.file+'<span>'+estimates.length+' estimate'+(estimates.length!==1?'s':'')+' on file</span></div>';
-  var latestFlagged = null;
-  if (!isCold && !isOnHold) threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
-  if (latestFlagged) html += '<div class="tile-row flag">'+ICONS.mail+'<span>Last email '+timeAgo(latestFlagged.last_message_at)+' &mdash; no reply yet</span></div>';
-  else if (threads.length) html += '<div class="tile-row">'+ICONS.mail+'<span>Last contact '+timeAgo(threads[0].last_message_at)+'</span></div>';
-  else html += '<div class="tile-row">'+ICONS.mail+'<span>No email history yet</span></div>';
+  // Always find the truly most-recent thread by last_message_at across ALL of
+  // this lead's threads (not just ones still needing a reply) — a lead can
+  // have several separate email threads (Gmail sometimes splits a single real
+  // conversation into more than one "thread" object), and picking only from
+  // needs-reply threads was showing the date of an old unanswered thread even
+  // when a completely different, newer thread had more recent activity.
+  var latestThread = null;
+  threads.forEach(function(t){ if (!latestThread || new Date(t.last_message_at) > new Date(latestThread.last_message_at)) latestThread = t; });
+  if (latestThread && !isCold && !isOnHold && latestThread.needs_reply) {
+    html += '<div class="tile-row flag">'+ICONS.mail+'<span>Last email '+timeAgo(latestThread.last_message_at)+' &mdash; no reply yet</span></div>';
+  } else if (latestThread) {
+    html += '<div class="tile-row">'+ICONS.mail+'<span>Last contact '+timeAgo(latestThread.last_message_at)+'</span></div>';
+  } else {
+    html += '<div class="tile-row">'+ICONS.mail+'<span>No email history yet</span></div>';
+  }
   html += '</div>';
 
   html += '<div class="tile-actions">';
@@ -843,10 +853,13 @@ function renderLeadDetail() {
   if (replyCount>0) html += '<span class="badge badge-flag">Needs a reply</span>';
   html += '</div></div>';
 
-  var latestFlagged = null;
-  if (!isCold && !isOnHold) threads.forEach(function(t){ if (t.needs_reply && (!latestFlagged || new Date(t.last_message_at) > new Date(latestFlagged.last_message_at))) latestFlagged = t; });
-  if (latestFlagged) html += '<div class="tile-row flag" style="font-size:16px;margin-bottom:4px">Last email '+timeAgo(latestFlagged.last_message_at)+' &mdash; nobody has replied yet.</div>';
-  else if (threads.length) html += '<div class="tile-row" style="font-size:16px;margin-bottom:4px">Last contact '+timeAgo(threads[0].last_message_at)+'.</div>';
+  var latestThread = null;
+  threads.forEach(function(t){ if (!latestThread || new Date(t.last_message_at) > new Date(latestThread.last_message_at)) latestThread = t; });
+  if (latestThread && !isCold && !isOnHold && latestThread.needs_reply) {
+    html += '<div class="tile-row flag" style="font-size:16px;margin-bottom:4px">Last email '+timeAgo(latestThread.last_message_at)+' &mdash; nobody has replied yet.</div>';
+  } else if (latestThread) {
+    html += '<div class="tile-row" style="font-size:16px;margin-bottom:4px">Last contact '+timeAgo(latestThread.last_message_at)+'.</div>';
+  }
 
   html += '<div class="ld-actions">';
   if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'">'+ICONS.phone+' '+esc(l.phone)+'</a>';
