@@ -758,7 +758,7 @@ function renderPage() {
   });
   var list = pool.filter(function(l){
     if (!q) return true;
-    var hay = ((l.customer_name||'')+' '+(l.phone||'')+' '+(l.primary_email||'')).toLowerCase();
+    var hay = ((l.customer_name||'')+' '+(l.phone||'')+' '+(l.primary_email||'')+' '+(l.contact_emails||[]).join(' ')+' '+(l.manual_emails||[]).join(' ')).toLowerCase();
     return hay.includes(q);
   });
   // Needs-reply first, then newest.
@@ -838,7 +838,7 @@ function renderLeadTile(l, i) {
   html += '<div class="tile-actions">';
   if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'" onclick="event.stopPropagation()">'+ICONS.phone+' '+esc(l.phone)+'</a>';
   else html += '<div class="call-btn" style="background:var(--surface-alt);color:var(--muted);cursor:default;box-shadow:none">No phone on file</div>';
-  if (l.primary_email || (l.contact_emails||[]).length) html += '<button class="icon-btn" onclick="event.stopPropagation();openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
+  if (leadHasEmail(l)) html += '<button class="icon-btn" onclick="event.stopPropagation();openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
   html += '</div></div>';
   return html;
 }
@@ -887,7 +887,7 @@ function renderLeadDetail() {
   html += '<div class="ld-actions">';
   if (l.phone) html += '<a class="call-btn" href="tel:'+digitsOnly(l.phone)+'">'+ICONS.phone+' '+esc(l.phone)+'</a>';
   else html += '<div class="call-btn" style="background:var(--surface-alt);color:var(--muted);cursor:default;box-shadow:none">No phone on file</div>';
-  if (l.primary_email || (l.contact_emails||[]).length) html += '<button class="icon-btn" onclick="openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
+  if (leadHasEmail(l)) html += '<button class="icon-btn" onclick="openEmailChoice(\''+esc(l.id)+'\')" title="Email">'+ICONS.mailLg+'</button>';
   html += '</div>';
 
   if (l.address || l.customer_tag_id) {
@@ -896,6 +896,8 @@ function renderLeadDetail() {
     if (l.customer_tag_id) html += '<div class="info-line"><b>Customer ID:</b> '+esc(l.customer_tag_id)+'</div>';
     html += '</div>';
   }
+
+  html += renderEmailsCard(l);
 
   html += '<div class="ld-card"><div class="section-label" style="margin-top:0">Job type</div><div class="status-chips">';
   ['new_construction','retrofit','replacement'].forEach(function(jt){
@@ -1115,22 +1117,40 @@ async function confirmDelete(id) {
   await loadAll();
 }
 
+// ── Email addresses on file — HCP-sourced + manually added ─────────────────
+// A lead's addresses can come from three places: HCP's primary_email,
+// HCP's contact_emails (secondary contacts on the customer record), and
+// manual_emails (addresses added directly here, for whenever HCP's API
+// only surfaces one address and there's really a second real inbox). This
+// merges all three into one deduped list, tagging where each one came from.
+function leadEmailEntries(l) {
+  var seen = {}, out = [];
+  function add(addr, source) {
+    if (!addr) return;
+    var key = String(addr).toLowerCase();
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push({ address: addr, source: source });
+  }
+  add(l.primary_email, 'hcp');
+  (l.contact_emails||[]).forEach(function(e){ add(e, 'hcp'); });
+  (l.manual_emails||[]).forEach(function(e){ add(e, 'manual'); });
+  return out;
+}
+function leadHasEmail(l) { return leadEmailEntries(l).length > 0; }
+
 // ── Email choice (copy vs. open default mail app) ──────────────────────────
 // Leads can have more than one email on file (a spouse, property manager,
 // etc.) — this used to only ever look at primary_email, silently ignoring
-// any others in contact_emails. Now it opens with every known address for
-// the lead, defaulting to the primary one, and lets you switch which one
-// you're copying/emailing if there's more than one.
+// any others. Now it opens with every known address for the lead (HCP +
+// manually added), defaulting to the first one, and lets you switch which
+// one you're copying/emailing if there's more than one.
 var emailModalAddress = '';
 var emailModalAddresses = [];
 function openEmailChoice(leadId) {
   var l = leads.find(function(x){return x.id===leadId;});
   if (!l) return;
-  var addrs = [];
-  if (l.primary_email) addrs.push(l.primary_email);
-  (l.contact_emails||[]).forEach(function(e){
-    if (e && addrs.every(function(a){ return a.toLowerCase() !== e.toLowerCase(); })) addrs.push(e);
-  });
+  var addrs = leadEmailEntries(l).map(function(e){ return e.address; });
   if (!addrs.length) return;
   emailModalAddresses = addrs;
   selectEmailAddress(addrs[0]);
@@ -1150,6 +1170,78 @@ function selectEmailAddress(addr) {
   }
 }
 function closeEmailModal(){ document.getElementById('email-modal').classList.remove('open'); }
+
+// ── Manage emails on file (lead detail page) ────────────────────────────────
+// Housecall Pro's API sometimes only exposes one email per customer, so this
+// lets a rep add a second real address directly here. Manually added emails
+// are stored separately (leads.manual_emails) from the HCP-sourced ones so a
+// resync from HCP never wipes them out, and they're searched during email
+// sync right alongside the HCP addresses.
+function renderEmailsCard(l) {
+  var entries = leadEmailEntries(l);
+  var html = '<div class="ld-card"><div class="section-label" style="margin-top:0">Emails on file</div>';
+  if (!entries.length) {
+    html += '<div style="font-size:14px;color:var(--muted);margin-bottom:10px">No email addresses on file yet.</div>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+    entries.forEach(function(e){
+      var addrEsc = esc(e.address).replace(/'/g,"\\'");
+      html += '<div style="display:flex;align-items:center;gap:8px">';
+      html += '<div style="flex:1;font-size:14px;word-break:break-all">'+esc(e.address)+(e.source==='manual'?' <span style="color:var(--muted);font-size:12px">&middot; added manually</span>':'')+'</div>';
+      html += '<button class="btn btn-sm" onclick="copyAddressDirect(\''+addrEsc+'\')">Copy</button>';
+      if (e.source === 'manual') {
+        html += '<button class="btn btn-sm" onclick="removeLeadEmail(\''+esc(l.id)+'\',\''+addrEsc+'\')" title="Remove">&times;</button>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '<div style="display:flex;gap:8px">';
+  html += '<input type="email" class="modal-input" id="ld-add-email-input" placeholder="Add another email address" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addLeadEmail(\''+esc(l.id)+'\');}">';
+  html += '<button class="btn btn-sm" onclick="addLeadEmail(\''+esc(l.id)+'\')">Add</button>';
+  html += '</div>';
+  html += '<div style="font-size:12px;color:var(--muted);margin-top:6px">Manually added emails are searched during email sync too.</div>';
+  html += '</div>';
+  return html;
+}
+function copyAddressDirect(addr) {
+  var done = function(){ showToast('Copied ' + addr); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(addr).then(done).catch(function(){ showToast('Could not copy — try again.'); });
+  } else {
+    var tmp = document.createElement('input');
+    tmp.value = addr; document.body.appendChild(tmp);
+    tmp.select(); document.execCommand('copy'); document.body.removeChild(tmp);
+    done();
+  }
+}
+async function addLeadEmail(leadId) {
+  var input = document.getElementById('ld-add-email-input');
+  var val = (input.value||'').trim().toLowerCase();
+  if (!val) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) { showToast("That doesn't look like a valid email address."); return; }
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  var already = leadEmailEntries(l).some(function(e){ return e.address.toLowerCase() === val; });
+  if (already) { showToast('That email is already on file.'); input.value = ''; return; }
+  var manual = (l.manual_emails||[]).concat([val]);
+  var r = await sb.from('leads').update({ manual_emails: manual, updated_at: new Date().toISOString() }).eq('id', leadId);
+  if (r.error) { showToast('Could not save that email — try again.'); return; }
+  l.manual_emails = manual;
+  input.value = '';
+  showToast('Email added.');
+  renderLeadDetail();
+}
+async function removeLeadEmail(leadId, email) {
+  var l = leads.find(function(x){return x.id===leadId;});
+  if (!l) return;
+  var manual = (l.manual_emails||[]).filter(function(e){ return e.toLowerCase() !== email.toLowerCase(); });
+  var r = await sb.from('leads').update({ manual_emails: manual, updated_at: new Date().toISOString() }).eq('id', leadId);
+  if (r.error) { showToast('Could not remove that email — try again.'); return; }
+  l.manual_emails = manual;
+  showToast('Email removed.');
+  renderLeadDetail();
+}
 function copyEmailAddress() {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(emailModalAddress).then(function(){
