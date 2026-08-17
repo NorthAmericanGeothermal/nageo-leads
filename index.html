@@ -91,7 +91,7 @@ tr:last-child td{border-bottom:none;}
 .dot-done{background:var(--success-tint);color:var(--success-text);}.dot-inprog{background:var(--warning-tint);color:var(--warning-text);}
 .dot-delayed{background:var(--danger-tint);color:var(--danger-text);}.dot-none{background:var(--surface-alt);color:var(--muted);}.dot-na{background:var(--surface-alt);color:var(--muted-2);font-size:9px;font-weight:700;}
 .dot-scheduled{background:var(--accent-tint);color:var(--accent-text);}
-.delay-badge{font-size:10px;padding:3px 9px;border-radius:999px;background:var(--danger-tint);color:var(--danger-text);font-weight:700;}
+.delay-badge{font-size:10px;padding:3px 9px;border-radius:999px;background:var(--danger-tint);color:var(--danger-text);font-weight:700;white-space:nowrap;display:inline-block;}
 .dot-wrap{position:relative;display:inline-block;}
 .dot-wrap .tip{display:none;position:fixed;background:var(--surface-raised);border:1px solid var(--border);color:var(--ink);font-size:13px;padding:10px 14px;border-radius:8px;white-space:normal;width:280px;z-index:500;line-height:1.6;text-align:left;pointer-events:none;transform:translateX(-50%);box-shadow:var(--shadow-md);}.dot-wrap .tip.tip-down{bottom:auto;top:calc(100% + 6px);}
 .dot-wrap .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:var(--surface-raised);}.dot-wrap .tip.tip-right::after{display:none;}.dot-wrap .tip.tip-down::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:var(--surface-raised);}
@@ -519,6 +519,7 @@ tr:last-child td{border-bottom:none;}
     <div class="modal-title" id="email-view-title">Sent Email</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px;" id="email-view-meta"></div>
     <div id="email-view-reply-box"></div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--muted);margin:14px 0 6px 0;">Sent message</div>
     <div class="email-frame-card" style="margin-top:0;"><iframe class="fe-frame" id="email-view-body-frame" sandbox="allow-popups allow-same-origin" title="Email content"></iframe></div>
     <div class="modal-btns">
       <button class="modal-cancel" id="email-view-checkreply-btn" onclick="checkEmailReply()" style="display:none;">Check for reply</button>
@@ -2558,7 +2559,11 @@ function renderEmailViewReplyBox(e){
         html += '<div class="email-frame-card"><iframe class="fe-frame" id="email-reply-frame" sandbox="allow-popups allow-same-origin" title="Reply"></iframe></div>';
       } else {
         var body = e.reply_body || e.reply_snippet;
-        if (body) html += '<div class="email-reply-body">' + esc(body).replace(/\n/g,'<br>') + '</div>';
+        if (body) {
+          html += '<div class="email-reply-body">' + esc(body).replace(/\n/g,'<br>') + '</div>';
+        } else {
+          html += '<div class="email-reply-body" style="color:var(--muted);font-style:italic;">A reply was detected, but no message text came back from the reply check. Open the browser console (F12) after clicking &ldquo;Check for reply&rdquo; to see the raw response &mdash; the field names may need adjusting.</div>';
+        }
       }
     }
   } else if (e.gmail_thread_id) {
@@ -2586,34 +2591,50 @@ async function checkEmailReply(){
       body:JSON.stringify({action:'check_reply', google_email:e.sent_from_email, thread_id:e.gmail_thread_id, gmail_thread_id:e.gmail_thread_id})
     });
     var data = await res.json();
-    console.log('check_reply response', data);
-    var r = data.reply || data;
-    var hasReply = !!(data.has_reply || data.replied || data.reply_found || (data.reply && (r.snippet || r.date || r.body || r.body_html || true)));
-    var snippet = r.reply_snippet || r.snippet || null;
-    var replyAt = r.reply_at || r.date || r.received_at || null;
-    var fromAddr = r.reply_from || r.from || r.sender || null;
-    var bodyHtml = r.reply_body_html || r.body_html || r.html || null;
-    var bodyPlain = r.reply_body || r.body || r.text || (bodyHtml ? htmlToPlainForGmail(bodyHtml) : null) || snippet || null;
+    console.log('check_reply RAW response (copy this if a reply is not showing correctly):', JSON.stringify(data, null, 2));
+    // The reply payload may be nested under a few different keys depending
+    // on the edge function version — check the common spots.
+    var r = data.reply || data.data || data.result || data;
+    if (r && r.reply && typeof r.reply === 'object') r = r.reply;
+    var hasReply = !!(data.has_reply || data.replied || data.reply_found || data.found || r.has_reply || r.replied || r.found
+      || (data.reply && typeof data.reply === 'object')
+      || r.snippet || r.reply_snippet || r.body || r.body_html || r.reply_body || r.reply_body_html || r.text || r.html
+      || (Array.isArray(data.thread) && data.thread.length > 1) || (Array.isArray(data.messages) && data.messages.length > 1)
+      || (Array.isArray(r.thread) && r.thread.length > 1) || (Array.isArray(r.messages) && r.messages.length > 1));
+    var snippet = r.reply_snippet || r.snippet || data.reply_snippet || data.snippet || null;
+    var replyAt = r.reply_at || r.date || r.received_at || r.receivedAt || r.internalDate || data.reply_at || null;
+    var fromAddr = r.reply_from || r.from || r.sender || r.replyFrom || data.reply_from || null;
+    var bodyHtml = r.reply_body_html || r.body_html || r.html || r.replyBodyHtml || r.htmlBody || data.reply_body_html || null;
+    var bodyPlain = r.reply_body || r.body || r.text || r.replyBody || r.snippet || data.reply_body || (bodyHtml ? htmlToPlainForGmail(bodyHtml) : null) || snippet || null;
     // Some check_reply implementations return the whole thread (multiple
     // messages) rather than just the latest reply — pick up on that if present.
     var rawThread = data.thread || data.messages || r.thread || r.messages || null;
     var thread = null;
     if (Array.isArray(rawThread) && rawThread.length) {
       thread = rawThread.map(function(msg){
-        var mBodyHtml = msg.body_html || msg.html || null;
+        var mBodyHtml = msg.body_html || msg.html || msg.htmlBody || null;
         var mBody = msg.body || msg.text || msg.snippet || (mBodyHtml ? htmlToPlainForGmail(mBodyHtml) : '') || '';
         return {
           from: msg.from || msg.sender || '',
-          date: msg.date || msg.received_at || msg.sent_at || '',
+          date: msg.date || msg.received_at || msg.receivedAt || msg.sent_at || '',
           body: mBody,
           bodyHtml: mBodyHtml
         };
       });
+      // If our own sent message got included as the first item in the
+      // thread (common when an API returns the full conversation), and we
+      // can identify it by matching sender address, drop it so only actual
+      // replies show.
+      if (e.sent_from_email && thread.length > 1) {
+        thread = thread.filter(function(m){ return (m.from||'').toLowerCase().indexOf(e.sent_from_email.toLowerCase()) === -1; });
+      }
     }
+    var noContentFound = hasReply && !bodyPlain && !bodyHtml && (!thread || !thread.length);
     if (hasReply) {
       var upd = { reply_received:true, reply_snippet: snippet||null, reply_body: bodyPlain||null, reply_body_html: bodyHtml||null, reply_from: fromAddr||null, reply_thread: thread, reply_at: replyAt ? new Date(replyAt).toISOString() : new Date().toISOString() };
       var updRes = await sb.from('job_emails').update(upd).eq('id', e.id);
       if (updRes.error) { showToast('Reply found, but could not save: ' + updRes.error.message); }
+      else if (noContentFound) { Object.assign(e, upd); showToast('Reply detected, but no message content came back — see console (F12) for the raw response.'); }
       else { Object.assign(e, upd); showToast('Reply found.'); }
     } else {
       showToast('No reply yet. If this seems wrong, check the browser console for the raw response — the field names may need adjusting.');
