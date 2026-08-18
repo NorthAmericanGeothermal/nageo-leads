@@ -195,12 +195,26 @@ svg{display:block;}
 .msg-when{color:var(--muted);white-space:nowrap;}
 .msg-sum{font-size:14px;color:var(--muted);}
 .needs-pill{background:var(--danger-tint);color:var(--danger-text);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;margin-left:6px;}
-.full-email{display:none;border-top:1px solid var(--border);padding:16px;background:var(--surface-alt);}
-.full-email.open{display:block;}
+.msg-row{cursor:pointer;}
 .fe-summary{display:flex;gap:9px;align-items:flex-start;background:var(--accent-tint);color:var(--accent-text);border-radius:12px;padding:12px 14px;font-size:14px;font-weight:500;margin-bottom:14px;}
 .fe-summary svg{width:17px;height:17px;flex-shrink:0;margin-top:1px;}
 .fe-meta{font-size:13px;color:var(--muted);margin-bottom:10px;}
 .fe-frame{width:100%;border:none;background:#fff;border-radius:12px;}
+
+/* Read-email modal: a real popup window for reading a message, replacing
+   the old cramped inline expansion. Sized generously and scrolls its own
+   body so long emails never fight the page for scroll. */
+.read-email-modal{width:720px;max-width:94vw;max-height:86vh;padding:0;display:flex;flex-direction:column;overflow:hidden;}
+.re-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:1.5rem 1.75rem 1.1rem;border-bottom:1px solid var(--border);flex-shrink:0;}
+.re-subject{font-size:19px;font-weight:700;letter-spacing:-0.01em;margin-bottom:6px;}
+.re-meta{font-size:14px;color:var(--muted);}
+#re-close-btn{flex-shrink:0;font-size:22px;line-height:1;color:var(--muted);}
+.re-body{overflow-y:auto;padding:1.5rem 1.75rem 1.75rem;flex:1;}
+@media(max-width:640px){
+  .read-email-modal{max-height:92vh;}
+  .re-hd{padding:1.1rem 1.25rem 0.9rem;}
+  .re-body{padding:1.1rem 1.25rem 1.4rem;}
+}
 
 .dz{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:18px;border-top:1px solid var(--border);}
 .hide-btn,.delete-btn,.cold-btn,.reactivate-btn,.hold-btn{font-size:13px;padding:9px 15px;border-radius:999px;cursor:pointer;font-weight:600;border:none;}
@@ -354,6 +368,15 @@ svg{display:block;}
       <button class="btn btn-sm" id="btn-repair-dates" onclick="repairThreadDates()">Fix email thread dates</button>
     </div>
     <div class="modal-row">
+      <div class="modal-label">Duplicate emails</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
+        Finds emails stored twice on the same lead (usually a message that was both sent/received and
+        cc'd to a different connected inbox), keeps the oldest copy, and removes the rest. Safe to run
+        any time.
+      </div>
+      <button class="btn btn-sm" id="btn-dedupe-emails" onclick="dedupeEmails()">Remove duplicate emails</button>
+    </div>
+    <div class="modal-row">
       <div class="modal-label">AI summaries</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
         Summaries are cached and only ever regenerate when you ask, to save AI credits. This checks
@@ -414,6 +437,21 @@ svg{display:block;}
     <div class="modal-btns">
       <button class="modal-cancel" style="width:100%" onclick="closeEmailModal()">Close</button>
     </div>
+  </div>
+</div>
+
+<!-- Read email modal: full-size popup for reading a single message, replaces
+     the old cramped inline expansion under each message row -->
+<div class="modal-bg" id="read-email-modal" onclick="if(event.target===this)closeReadEmailModal()">
+  <div class="modal read-email-modal">
+    <div class="re-hd">
+      <div class="re-hd-text">
+        <div class="re-subject" id="re-subject"></div>
+        <div class="re-meta" id="re-meta"></div>
+      </div>
+      <button class="btn-icon" onclick="closeReadEmailModal()" title="Close" id="re-close-btn">&times;</button>
+    </div>
+    <div class="re-body" id="re-body"></div>
   </div>
 </div>
 
@@ -513,7 +551,7 @@ initIcons();
 
 var currentUser = null, users = [];
 var leads = [], gmailAccounts = [];
-var openThreads = new Set(), openEmails = new Set(), showDel = new Set();
+var openThreads = new Set(), showDel = new Set();
 var threadsByLead = {}, messagesByThread = {}, notesByLead = {};
 var currentPage = 'pipeline';
 var appSettings = {};
@@ -739,6 +777,31 @@ async function repairThreadDates() {
     await loadAll();
   } catch (e) {
     showToast('Repair failed.'); console.error(e);
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+}
+
+// ── Retroactive cleanup for emails stored twice (see dedupe_emails action
+// for why this happens — usually a cc'd copy landing in a second connected
+// Gmail account) ────────────────────────────────────────────────────────────
+async function dedupeEmails() {
+  var btn = document.getElementById('btn-dedupe-emails');
+  var origText = btn.textContent;
+  btn.textContent = 'Checking…';
+  btn.disabled = true;
+  try {
+    var data = await callLeadFn({ action: 'dedupe_emails' }, 90000);
+    if (data.error) { showToast('Cleanup failed: ' + data.error); return; }
+    if (!data.messages_deleted) {
+      showToast('No duplicate emails found.');
+    } else {
+      showToast('Removed ' + data.messages_deleted + ' duplicate email(s) across ' + data.threads_repaired + ' thread(s)' + (data.threads_deleted ? ', ' + data.threads_deleted + ' now-empty thread(s) removed' : '') + '.');
+    }
+    await loadAll();
+  } catch (e) {
+    showToast('Cleanup failed.'); console.error(e);
   } finally {
     btn.textContent = origText;
     btn.disabled = false;
@@ -1031,13 +1094,11 @@ function renderLeadDetail() {
         html += '<div class="msgs'+(tOpen?' open':'')+'">';
         if (!msgs.length) html += '<div style="padding:12px 14px;font-size:13px;color:var(--muted)">No messages loaded.</div>';
         msgs.slice().reverse().forEach(function(m){
-          var eOpen = openEmails.has(m.id);
           var isLast = msgs[msgs.length-1].id === m.id;
-          html += '<div class="msg-row" onclick="toggleEmail(\''+m.id+'\')">';
+          html += '<div class="msg-row" onclick="openReadEmailModal(\''+m.id+'\')">';
           html += '<div class="msg-top"><span class="msg-who '+(m.direction==='inbound'?'in':'out')+'">'+(m.direction==='inbound'?'Received':'Sent')+' &mdash; '+esc(m.direction==='inbound'?m.from_address:(m.to_addresses||[])[0]||'')+'</span><span class="msg-when">'+niceDate(m.sent_at)+'</span></div>';
           html += '<div class="msg-sum">'+esc(m.ai_summary || m.snippet || '')+(flagged && isLast && m.direction==='inbound' ? '<span class="needs-pill">No reply yet</span>' : '')+'</div>';
           html += '</div>';
-          html += '<div class="full-email'+(eOpen?' open':'')+'" id="fe-'+m.id+'"></div>';
         });
         html += '</div></div>';
       });
@@ -1361,26 +1422,32 @@ function sectionHeader(leadId, key, title, count, extraHtml) {
   return h;
 }
 function toggleThread(id){ if(openThreads.has(id))openThreads.delete(id);else openThreads.add(id); renderLeadDetail(); }
-function toggleEmail(id){
-  if (openEmails.has(id)) openEmails.delete(id); else openEmails.add(id);
-  renderLeadDetail();
-  if (openEmails.has(id)) fillEmailFrame(id);
-}
-function fillEmailFrame(msgId) {
+// Opens a single message in a large, dedicated popup instead of the old
+// cramped inline expansion under its row — makes long emails actually
+// scrollable/readable instead of squeezed into the card.
+function openReadEmailModal(msgId) {
   var msg = null;
   Object.keys(messagesByThread).forEach(function(tid){ (messagesByThread[tid]||[]).forEach(function(m){ if (m.id===msgId) msg = m; }); });
-  var el = document.getElementById('fe-'+msgId);
-  if (!msg || !el) return;
+  if (!msg) return;
+  document.getElementById('re-subject').textContent = msg.subject || '(no subject)';
+  var who = msg.direction === 'inbound' ? msg.from_address : 'you';
+  var toWhom = msg.direction === 'inbound' ? (msg.to_addresses||[]).join(', ') : msg.from_address;
+  document.getElementById('re-meta').innerHTML = '<b>'+esc(who)+'</b> to '+esc(toWhom)+' &middot; '+niceDate(msg.sent_at);
+  var bodyEl = document.getElementById('re-body');
   var html = '';
   if (msg.ai_summary) html += '<div class="fe-summary">'+ICONS.sparkle+'<span>'+esc(msg.ai_summary)+'</span></div>';
-  html += '<div class="fe-meta"><b>'+esc(msg.direction==='inbound'?msg.from_address:'you')+'</b> to '+esc(msg.direction==='inbound'?(msg.to_addresses||[]).join(', '):msg.from_address)+' &middot; '+niceDate(msg.sent_at)+'</div>';
-  html += '<iframe class="fe-frame" id="fe-frame-'+msgId+'" sandbox=""></iframe>';
-  el.innerHTML = html;
-  var frame = document.getElementById('fe-frame-'+msgId);
+  html += '<iframe class="fe-frame" id="re-frame" sandbox=""></iframe>';
+  bodyEl.innerHTML = html;
+  var frame = document.getElementById('re-frame');
   var body = msg.body_html || ('<pre style="white-space:pre-wrap;font-family:inherit;font-size:15px;margin:0">'+esc(msg.body_text||msg.snippet||'(no content)')+'</pre>');
   var doc = '<html><head><meta charset="utf-8"><style>body{font-family:-apple-system,sans-serif;font-size:15px;margin:0;padding:2px;color:#1a1a1a;}</style></head><body>'+body+'</body></html>';
   frame.srcdoc = doc;
   frame.onload = function(){ try{ frame.style.height = (frame.contentWindow.document.body.scrollHeight+20)+'px'; }catch(e){} };
+  document.getElementById('read-email-modal').classList.add('open');
+}
+function closeReadEmailModal() {
+  document.getElementById('read-email-modal').classList.remove('open');
+  document.getElementById('re-body').innerHTML = '';
 }
 async function setStatus(leadId, status) {
   await sb.from('leads').update({ status: status, updated_at: new Date().toISOString() }).eq('id', leadId);
