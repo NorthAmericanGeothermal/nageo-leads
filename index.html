@@ -207,7 +207,10 @@ svg{display:block;}
 .read-email-modal{width:720px;max-width:94vw;max-height:86vh;padding:0;display:flex;flex-direction:column;overflow:hidden;}
 .re-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:1.5rem 1.75rem 1.1rem;border-bottom:1px solid var(--border);flex-shrink:0;}
 .re-subject{font-size:19px;font-weight:700;letter-spacing:-0.01em;margin-bottom:6px;}
-.re-meta{font-size:14px;color:var(--muted);}
+.re-meta{display:flex;flex-direction:column;gap:3px;}
+.re-field{display:flex;gap:10px;font-size:14px;line-height:1.5;}
+.re-field-label{color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;flex-shrink:0;width:40px;padding-top:2px;}
+.re-field-value{color:var(--ink);word-break:break-word;}
 #re-close-btn{flex-shrink:0;font-size:22px;line-height:1;color:var(--muted);}
 .re-body{overflow-y:auto;padding:1.5rem 1.75rem 1.75rem;flex:1;}
 @media(max-width:640px){
@@ -1430,9 +1433,23 @@ function openReadEmailModal(msgId) {
   Object.keys(messagesByThread).forEach(function(tid){ (messagesByThread[tid]||[]).forEach(function(m){ if (m.id===msgId) msg = m; }); });
   if (!msg) return;
   document.getElementById('re-subject').textContent = msg.subject || '(no subject)';
-  var who = msg.direction === 'inbound' ? msg.from_address : 'you';
-  var toWhom = msg.direction === 'inbound' ? (msg.to_addresses||[]).join(', ') : msg.from_address;
-  document.getElementById('re-meta').innerHTML = '<b>'+esc(who)+'</b> to '+esc(toWhom)+' &middot; '+niceDate(msg.sent_at);
+  // Spelled out plainly, label by label — From/To/Cc — instead of a single
+  // squished summary line, since who exactly sent/received/was cc'd is
+  // often the whole reason someone opens a message. raw_headers keeps the
+  // original "Name <email>" text for each of these (cc included, even
+  // though cc isn't broken out into its own column on email_messages), so
+  // prefer that over the parsed from_address/to_addresses fields when it's
+  // there.
+  var headers = msg.raw_headers || {};
+  var fromLine = headers['from'] || (msg.direction === 'inbound' ? msg.from_address : 'you');
+  var toLine = headers['to'] || (msg.to_addresses||[]).join(', ');
+  var ccLine = headers['cc'] || '';
+  var metaHtml = '';
+  metaHtml += '<div class="re-field"><span class="re-field-label">From</span><span class="re-field-value">'+esc(fromLine)+'</span></div>';
+  metaHtml += '<div class="re-field"><span class="re-field-label">To</span><span class="re-field-value">'+esc(toLine)+'</span></div>';
+  if (ccLine) metaHtml += '<div class="re-field"><span class="re-field-label">Cc</span><span class="re-field-value">'+esc(ccLine)+'</span></div>';
+  metaHtml += '<div class="re-field"><span class="re-field-label">Date</span><span class="re-field-value">'+esc(niceDate(msg.sent_at))+'</span></div>';
+  document.getElementById('re-meta').innerHTML = metaHtml;
   var bodyEl = document.getElementById('re-body');
   var html = '';
   if (msg.ai_summary) html += '<div class="fe-summary">'+ICONS.sparkle+'<span>'+esc(msg.ai_summary)+'</span></div>';
