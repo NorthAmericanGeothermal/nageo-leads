@@ -204,7 +204,7 @@ svg{display:block;}
 /* Read-email modal: a real popup window for reading a message, replacing
    the old cramped inline expansion. Sized generously and scrolls its own
    body so long emails never fight the page for scroll. */
-.read-email-modal{width:960px;max-width:96vw;max-height:94vh;padding:0;display:flex;flex-direction:column;overflow:hidden;}
+.read-email-modal{width:98vw;max-width:1400px;height:97vh;padding:0;display:flex;flex-direction:column;overflow:hidden;}
 .re-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:1.5rem 1.75rem 1.1rem;border-bottom:1px solid var(--border);flex-shrink:0;}
 .re-subject{font-size:19px;font-weight:700;letter-spacing:-0.01em;margin-bottom:6px;}
 .re-meta{display:flex;flex-direction:column;gap:3px;}
@@ -214,7 +214,7 @@ svg{display:block;}
 #re-close-btn{flex-shrink:0;font-size:22px;line-height:1;color:var(--muted);}
 .re-body{overflow-y:auto;padding:1.5rem 1.75rem 1.75rem;flex:1;}
 @media(max-width:640px){
-  .read-email-modal{max-height:92vh;}
+  .read-email-modal{width:100vw;height:100vh;}
   .re-hd{padding:1.1rem 1.25rem 0.9rem;}
   .re-body{padding:1.1rem 1.25rem 1.4rem;}
 }
