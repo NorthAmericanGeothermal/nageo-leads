@@ -364,6 +364,15 @@ svg{display:block;}
       <input type="text" class="modal-input" id="cold-tag-input" placeholder="e.g. Cold Lead">
     </div>
     <div class="modal-row">
+      <div class="modal-label">HCP tag for won leads</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
+        Added to the customer in Housecall Pro when a lead is marked Won (on top of removing the
+        active/cold/on-hold tags, as before) — this is separate from those, and stays on the customer
+        going forward so other software watching for it can pick the job up.
+      </div>
+      <input type="text" class="modal-input" id="won-tag-input" placeholder="e.g. geo-install">
+    </div>
+    <div class="modal-row">
       <div class="modal-label">Connected Gmail accounts</div>
       <div id="gmail-list"></div>
       <button class="btn btn-sm" style="margin-top:8px" onclick="connectGmail()">+ Connect Gmail</button>
@@ -627,6 +636,7 @@ function openSettings() {
   document.getElementById('hcp-tag-input').value = appSettings.leadHcpTag || 'Prospect';
   document.getElementById('onhold-tag-input').value = appSettings.onHoldTag || 'On Hold';
   document.getElementById('cold-tag-input').value = appSettings.coldLeadTag || 'Cold Lead';
+  document.getElementById('won-tag-input').value = appSettings.wonTag || 'geo-install';
   renderGmail();
   document.getElementById('settings-modal').classList.add('open');
 }
@@ -635,10 +645,12 @@ async function saveSettings() {
   var tag = document.getElementById('hcp-tag-input').value.trim() || 'Prospect';
   var onHoldTag = document.getElementById('onhold-tag-input').value.trim() || 'On Hold';
   var coldTag = document.getElementById('cold-tag-input').value.trim() || 'Cold Lead';
-  appSettings.leadHcpTag = tag; appSettings.onHoldTag = onHoldTag; appSettings.coldLeadTag = coldTag;
+  var wonTag = document.getElementById('won-tag-input').value.trim() || 'geo-install';
+  appSettings.leadHcpTag = tag; appSettings.onHoldTag = onHoldTag; appSettings.coldLeadTag = coldTag; appSettings.wonTag = wonTag;
   await sb.from('settings').upsert({ key: 'leadHcpTag', value: tag });
   await sb.from('settings').upsert({ key: 'onHoldTag', value: onHoldTag });
   await sb.from('settings').upsert({ key: 'coldLeadTag', value: coldTag });
+  await sb.from('settings').upsert({ key: 'wonTag', value: wonTag });
   closeSettings(); showToast('Settings saved.');
 }
 
@@ -1372,7 +1384,7 @@ async function moveLeadPipelineStage(leadId, stage) {
 async function confirmMarkWon(leadId) {
   var l = leads.find(function(x){return x.id===leadId;});
   if (!l) return;
-  if (!confirm('Mark ' + l.customer_name + ' as Won? This removes the Prospect/Cold/On-Hold tags in Housecall Pro and moves them to the Won tab.')) {
+  if (!confirm('Mark ' + l.customer_name + ' as Won? This removes the Prospect/Cold/On-Hold tags in Housecall Pro, adds the "' + (appSettings.wonTag || 'geo-install') + '" tag, and moves them to the Won tab.')) {
     renderPage(); // redraw so the card snaps back if it visually moved
     return;
   }
@@ -1380,7 +1392,7 @@ async function confirmMarkWon(leadId) {
   try {
     var data = await callLeadFn({ action: 'mark_won', lead_id: leadId });
     if (data.error) { showToast('Could not mark as won: ' + data.error); return; }
-    showToast(l.customer_name + ' marked as Won!');
+    showToast(l.customer_name + ' marked as Won!' + (data.won_tag_added === false ? ' (heads up: the "' + (appSettings.wonTag || 'geo-install') + '" tag could not be added in HCP — check Settings/logs.)' : ''));
     await loadAll();
   } catch (e) {
     showToast('Could not mark as won.'); console.error(e);
